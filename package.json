@@ -1,0 +1,56 @@
+{
+  "name": "@webqit/keyval",
+  "publishConfig": {
+    "access": "public"
+  },
+  "title": "Keyval",
+  "description": "Lightweight key/val storage for modern apps – Redis, IndexedDB, InMemory",
+  "keywords": [
+    "Keyval",
+    "redis",
+    "indexeddb",
+    "inmemory",
+    "nosql"
+  ],
+  "homepage": "https://keyval.netlify.app/",
+  "icon": "https://webqit.io/icon.svg",
+  "version": "0.1.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/webqit/keyval.git"
+  },
+  "bugs": {
+    "url": "https://github.com/webqit/keyval/issues"
+  },
+  "type": "module",
+  "sideEffects": true,
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/InMem.js",
+    "./inmem": "./src/InMem.js",
+    "./redis": "./src/RedisStore.js",
+    "./idb": "./src/IDBStore.js"
+  },
+  "scripts": {
+    "test": "mocha --extension .test.js --recursive --timeout 5000 --exit",
+    "build": "esbuild main=src/InMem.js idb=src/IDBStore.js --bundle --minify --sourcemap --outdir=dist",
+    "preversion": "npm run test && npm run build && git add -A dist",
+    "postversion": "git push && git push --tags",
+    "version:next": "npm version prerelease --preid=next"
+  },
+  "devDependencies": {
+    "chai": "^4.3.4",
+    "chai-as-promised": "^7.1.1",
+    "esbuild": "^0.20.2",
+    "mocha": "^10.3.0"
+  },
+  "author": "Oxford Harrison <oxharris.dev@gmail.com>",
+  "maintainers": [
+    "Oxford Harrison <oxharris.dev@gmail.com>"
+  ],
+  "contributors": [],
+  "dependencies": {
+    "node-redis": "^0.1.7"
+  }
+}
