@@ -7,7 +7,7 @@ export class FileStore extends Store {
 
     #file;
 
-    constructor({ dir = '.store', ...options }) {
+    constructor({ dir = '.webqit_store', ...options }) {
         super(options);
         const safePath = this.path.map(p =>
             p.replace(/[\/\\]/g, '_')

@@ -10,7 +10,7 @@ export class IDBStore extends Store {
     #storeName;
     #channel;
 
-    constructor({ dbName = 'webqit', channel = null, ...options }) {
+    constructor({ dbName = 'webqit_store', channel = null, ...options }) {
         super(options);
         this.#dbName = dbName;
         this.#storeName = this.path.join(':');
