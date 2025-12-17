@@ -3,15 +3,18 @@ export class Store {
     static create(options) { return new this(options); }
 
     #path;
+    #ttl;
     #registry;
     #origins;
 
     get path() { return this.#path; }
+    get ttl() { return this.#ttl; }
     get registry() { return this.#registry; }
     get origins() { return this.#origins; }
 
-    constructor({ path, registry = new Map, origins = [] } = {}) {
+    constructor({ path, ttl = 0, registry = new Map, origins = [] } = {}) {
         this.#path = path;
+        this.#ttl = ttl;
         this.#registry = registry;
         this.#origins = origins;
     }
@@ -32,32 +35,32 @@ export class Store {
             entries: Set<fn>
         }
         */
-        return path.reduce((context, key, i) => {
-            if (create === 0 && i && !context.subtree.has(key)) {
-                return context;
+        return path.reduce((node, key, i) => {
+            if (create === 0 && i && !node.subtree.has(key)) {
+                return node;
             }
-            if (create && !context.subtree.has(key)) {
+            if (create && !node.subtree.has(key)) {
                 const subtree = new Map;
                 const entries = new Set;
-                const dispose = () => context.subtree.delete(key);
-                context.subtree.set(key, { subtree, entries, context, dispose });
+                const dispose = () => node.subtree.delete(key);
+                node.subtree.set(key, { subtree, entries, context: node, dispose });
             }
-            return context?.subtree.get(key);
+            return node?.subtree.get(key);
         }, { subtree: this.#registry });
     }
 
     _observe(path, callback, options = {}) {
-        const context = this._path(path, true);
+        const node = this._path(path, true);
 
         const dispose = () => {
-            context.entries.delete(subscription);
-            if (!context.entries.size) {
-                context.dispose();
+            node.entries.delete(subscription);
+            if (!node.entries.size) {
+                node.dispose();
             }
         };
 
         const subscription = { callback, options, origins: this.#origins, dispose };
-        context.entries.add(subscription);
+        node.entries.add(subscription);
 
         if (options.signal) {
             options.signal.addEventListener('abort', dispose);
@@ -70,22 +73,21 @@ export class Store {
         if (!['set', 'delete', 'clear'].includes(event.type)) {
             throw new Error(`Invalid event`);
         }
-        const context = this._path(path, 0);
-        if (!context) return;
+        const node = this._path(path, 0);
+        if (!node) return;
 
         const entries = [];
-        let _context = context;
-        while (_context) {
-            entries.push(..._context.entries);
-            _context = _context.context;
-        }
+        let _node = node;
+        do {
+            entries.push(..._node.entries);
+        } while ((_node = _node.context) && _node.entries);
 
         const returnValues = [];
         const fire = (subscription, _path = path) => {
             const { callback, options, origins: subscriptionOrigins, dispose } = subscription;
 
             let i = this.#origins.length - 1;
-            for (; i >= (options.scope || 0); i --) {
+            for (; i >= (options.scope || 0); i--) {
                 if (subscriptionOrigins[i] !== this.#origins[i]) return;
             }
 
@@ -97,8 +99,8 @@ export class Store {
         entries.forEach(fire);
 
         if (event.type === 'clear') {
-            const context = this._path(path, false);
-            for (const [key, field] of context?.subtree.entries() || []) {
+            const node = this._path(path, false);
+            for (const [key, field] of node?.subtree.entries() || []) {
                 for (const subscription of field.entries) {
                     fire(subscription, path.concat(key));
                 }
@@ -121,4 +123,6 @@ export class Store {
     }
 
     cleanup() { this._path(this.#path, false)?.dispose(); }
+
+    async close() { }
 }

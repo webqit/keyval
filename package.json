@@ -4,12 +4,13 @@
     "access": "public"
   },
   "title": "Keyval",
-  "description": "Lightweight key/val storage for modern apps – Redis, IndexedDB, InMemory",
+  "description": "Lightweight key/value storage abstraction for modern apps — Redis, IndexedDB, Memory, File",
   "keywords": [
-    "Keyval",
+    "keyval",
     "redis",
     "indexeddb",
-    "inmemory",
+    "memory-store",
+    "file-store",
     "nosql"
   ],
   "homepage": "https://keyval.netlify.app/",
@@ -24,17 +25,16 @@
     "url": "https://github.com/webqit/keyval/issues"
   },
   "type": "module",
-  "sideEffects": true,
-  "main": "./src/index.js",
   "exports": {
-    ".": "./src/InMem.js",
-    "./inmem": "./src/InMem.js",
+    ".": "./src/index.js",
+    "./memory": "./src/MemoryStore.js",
     "./redis": "./src/RedisStore.js",
-    "./idb": "./src/IDBStore.js"
+    "./idb": "./src/IDBStore.js",
+    "./file": "./src/FileStore.js"
   },
   "scripts": {
     "test": "mocha --extension .test.js --recursive --timeout 5000 --exit",
-    "build": "esbuild main=src/InMem.js idb=src/IDBStore.js --bundle --minify --sourcemap --outdir=dist",
+    "build": "esbuild main=src/MemoryStore.js idb=src/IDBStore.js --bundle --minify --sourcemap --outdir=dist",
     "preversion": "npm run test && npm run build && git add -A dist",
     "postversion": "git push && git push --tags",
     "version:next": "npm version prerelease --preid=next"
@@ -43,6 +43,7 @@
     "chai": "^4.3.4",
     "chai-as-promised": "^7.1.1",
     "esbuild": "^0.20.2",
+    "fake-indexeddb": "^6.2.5",
     "mocha": "^10.3.0"
   },
   "author": "Oxford Harrison <oxharris.dev@gmail.com>",
@@ -51,6 +52,6 @@
   ],
   "contributors": [],
   "dependencies": {
-    "node-redis": "^0.1.7"
+    "redis": "^5.10.0"
   }
 }

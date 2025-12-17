@@ -8,12 +8,10 @@ export class IDBStore extends Store {
     #db;
     #dbName;
     #storeName;
-    #ttl;
     #channel;
 
-    constructor({ dbName = 'webqit', ttl = 0, channel = null, ...options }) {
+    constructor({ dbName = 'webqit', channel = null, ...options }) {
         super(options);
-        this.#ttl = ttl;
         this.#dbName = dbName;
         this.#storeName = this.path.join(':');
         if (channel) {
@@ -88,14 +86,14 @@ export class IDBStore extends Store {
             .objectStore(this.#storeName);
     }
 
-    #isExpired(entry) {
-        return entry?.expiresAt && entry.expiresAt <= Date.now();
+    #isExpired(node) {
+        return node?.expiresAt && node.expiresAt <= Date.now();
     }
 
     #wrapValue(value) {
         return {
             value,
-            expiresAt: this.#ttl ? Date.now() + this.#ttl * 1000 : null,
+            expiresAt: this.ttl ? Date.now() + this.ttl * 1000 : null,
         };
     }
 
@@ -104,6 +102,11 @@ export class IDBStore extends Store {
     async close() {
         this.#channel?.close();
         this.#db?.close();
+
+        IDBStore.#dbCache.delete(this.#dbName);
+        this.#db = null;
+
+        await super.close();
     }
 
     async has(key) {
@@ -116,12 +119,12 @@ export class IDBStore extends Store {
         return new Promise((resolve, reject) => {
             const req = this.#tx().get(key);
             req.onsuccess = async () => {
-                const entry = req.result;
-                if (!entry || this.#isExpired(entry)) {
-                    if (entry) await this.delete(key);
+                const node = req.result;
+                if (!node || this.#isExpired(node)) {
+                    if (node) await this.delete(key);
                     resolve(undefined);
                 } else {
-                    resolve(entry.value);
+                    resolve(node.value);
                 }
             };
             req.onerror = () => reject(req.error);
@@ -224,21 +227,29 @@ export class IDBStore extends Store {
 
     async entries() {
         await this.#open();
-        return new Promise((resolve, reject) => {
-            const req = this.#tx().getAll();
-            const keysReq = this.#tx().getAllKeys();
 
-            Promise.all([
-                new Promise((r) => (req.onsuccess = () => r(req.result))),
-                new Promise((r) => (keysReq.onsuccess = () => r(keysReq.result))),
-            ]).then(([values, keys]) => {
+        return new Promise((resolve, reject) => {
+            const tx = this.#db.transaction(this.#storeName, 'readonly');
+            const store = tx.objectStore(this.#storeName);
+
+            const valuesReq = store.getAll();
+            const keysReq = store.getAllKeys();
+
+            let values, keys;
+
+            valuesReq.onsuccess = () => { values = valuesReq.result; };
+            keysReq.onsuccess = () => { keys = keysReq.result; };
+
+            tx.oncomplete = () => {
                 resolve(
                     keys
                         .map((k, i) => [k, values[i]])
                         .filter(([, e]) => !this.#isExpired(e))
                         .map(([k, e]) => [k, e.value])
                 );
-            }).catch(reject);
+            };
+
+            tx.onerror = () => reject(tx.error);
         });
     }
 

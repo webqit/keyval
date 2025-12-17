@@ -1,27 +1,22 @@
 import { Store } from './Store.js';
-import { createClient } from 'node-redis';
+import { createClient } from 'redis';
+export { createClient };
 export { Store };
 
 export class RedisStore extends Store {
 
-    static createClient(redisUrl) {
-        return redisUrl ? createClient({ url: redisUrl }) : createClient();
-    }
-
     #redis;
     #redisPath;
     #channel;
-    #ttl;
     #serialize;
     #deserialize;
     #connect;
 
-    constructor({ redisUrl = null, ttl = 0, channel = null, host = '*', serialize = null, deserialize = null, ...options }) {
+    constructor({ redisUrl = null, channel = null, host = '*', serialize = null, deserialize = null, ...options }) {
         super(options);
-        this.#redis = this.constructor.createClient(redisUrl);
+        this.#redis = redisUrl ? createClient({ url: redisUrl }) : createClient();
         this.#redis.on('error', (err) => console.error('Redis error:', err));
         this.#connect = this.#redis.connect();
-        this.#ttl = ttl;
         this.#redisPath = `${host}:${this.path.join(':')}`;
         this.#channel = channel;
         this.#serialize = serialize || ((val) => (val === undefined ? null : JSON.stringify(val)));
@@ -30,6 +25,7 @@ export class RedisStore extends Store {
 
     async close() {
         await this.#redis.quit();
+        await super.close();
     }
 
     async has(key) {
@@ -80,8 +76,8 @@ export class RedisStore extends Store {
             const eventJson = JSON.stringify(event);
             op.publish(this.#channel, eventJson);
         }
-        if (this.#ttl) {
-            op.expire(this.#redisPath, this.#ttl);
+        if (this.ttl) {
+            op.expire(this.#redisPath, this.ttl);
         }
         await op.exec();
         await this._fire(event);
@@ -102,8 +98,8 @@ export class RedisStore extends Store {
             const eventJson = JSON.stringify(event);
             op.publish(this.#channel, eventJson);
         }
-        if (this.#ttl) {
-            op.expire(this.#redisPath, this.#ttl);
+        if (this.ttl) {
+            op.expire(this.#redisPath, this.ttl);
         }
         await op.exec();
         await this._fire(event);
