@@ -2,7 +2,7 @@ import { RedisStore } from '../src/RedisStore.js';
 import { runStoreContract } from './helpers/storeContract.js';
 import { redisAvailable } from './helpers/redis.js';
 
-const redisUrl = "redis://default:urWaszGnagYdKekImCsoAgRcFHDLpmam@shinkansen.proxy.rlwy.net:39377";
+const redisUrl = null;
 describe('RedisStore', async () => {
     before(async function () {
         this.timeout(20000);
