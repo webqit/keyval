@@ -20,8 +20,8 @@ export class Store {
     }
 
     _path(path, create = true) {
-        if (!Array.isArray(path) || !path.length || path.length > this.#path.length + 1) {
-            throw new Error(`Path length must be between 1 and ${this.#path.length + 1}`);
+        if (!Array.isArray(path) || !path.length) {
+            throw new Error(`Path length cannot be 0`);
         }
         /*
         base -> {
@@ -36,10 +36,7 @@ export class Store {
         }
         */
         return path.reduce((node, key, i) => {
-            if (create === 0 && i && !node.subtree.has(key)) {
-                return node;
-            }
-            if (create && !node.subtree.has(key)) {
+            if (create && !node?.subtree.has(key)) {
                 const subtree = new Map;
                 const entries = new Set;
                 const dispose = () => {
@@ -49,6 +46,9 @@ export class Store {
                     }
                 };
                 node.subtree.set(key, { subtree, entries, context: node, dispose });
+            }
+            if (create === 0 && i && !node?.subtree.has(key)) {
+                return node;
             }
             return node?.subtree.get(key);
         }, { subtree: this.#registry });
