@@ -24,38 +24,40 @@ export class RedisStore extends Store {
     }
 
     async close() {
-        await this.#redis.quit();
+        try {
+            await this.#redis.quit();
+        } catch (e) {}
         await super.close();
     }
 
     async has(key) {
         await this.#connect;
-        return (await this.#redis.hexists(this.#redisPath, key)) === 1;
+        return (await this.#redis.hExists(this.#redisPath, key)) === 1;
     }
 
     async keys() {
         await this.#connect;
-        return await this.#redis.hkeys(this.#redisPath);
+        return await this.#redis.hKeys(this.#redisPath);
     }
 
     async values() {
         await this.#connect;
-        return (await this.#redis.hvals(this.#redisPath)).map((v) => this.#deserialize(v));
+        return (await this.#redis.hVals(this.#redisPath)).map((v) => this.#deserialize(v));
     }
 
     async entries() {
         await this.#connect;
-        return Object.entries(await this.#redis.hgetall(this.#redisPath)).map(([key, value]) => [key, this.#deserialize(value)]);
+        return Object.entries(await this.#redis.hGetAll(this.#redisPath)).map(([key, value]) => [key, this.#deserialize(value)]);
     }
 
     async count() {
         await this.#connect;
-        return this.#redis.hlen(this.#redisPath);
+        return this.#redis.hLen(this.#redisPath);
     }
 
     async get(key) {
         await this.#connect;
-        const jsonValue = await this.#redis.hget(this.#redisPath, key);
+        const jsonValue = await this.#redis.hGet(this.#redisPath, key);
         return this.#deserialize(jsonValue);
     }
 
@@ -71,7 +73,7 @@ export class RedisStore extends Store {
         };
         const jsonValue = this.#serialize(value);
         const op = this.#redis.multi()
-            .hset(this.#redisPath, key, jsonValue);
+            .hSet(this.#redisPath, key, jsonValue);
         if (this.#channel) {
             const eventJson = JSON.stringify(event);
             op.publish(this.#channel, eventJson);
@@ -93,7 +95,7 @@ export class RedisStore extends Store {
             timestamp: Date.now(),
         };
         const op = this.#redis.multi()
-            .hdel(this.#redisPath, key);
+            .hDel(this.#redisPath, key);
         if (this.#channel) {
             const eventJson = JSON.stringify(event);
             op.publish(this.#channel, eventJson);
@@ -121,5 +123,47 @@ export class RedisStore extends Store {
         }
         await op.exec();
         await this._fire(event);
+    }
+
+    async json(arg = null, options = {}) {
+        await this.#connect;
+
+        if (arg && arg !== true) {
+            if (typeof arg !== 'object') {
+                throw new Error(`Argument must be a valid JSON object`);
+            }
+            
+            if (options.hashed) {
+                throw new Error('Hashed data not supported');
+            }
+
+            const event = {
+                type: 'json',
+                data: arg,
+                options,
+                path: this.path,
+                origins: this.origins,
+                timestamp: Date.now(),
+            };
+
+            const op = this.#redis.multi();
+            if (!options.merge) {
+                op.del(this.#redisPath);
+            }
+            for (const [key, value] of Object.entries(arg)) {
+                const jsonValue = this.#serialize(value);
+                op.hSet(this.#redisPath, key, jsonValue);
+            }
+            if (this.#channel) {
+                const eventJson = JSON.stringify(event);
+                op.publish(this.#channel, eventJson);
+            }
+            await op.exec();
+
+            await this._fire(event);
+            return;
+        }
+
+        return Object.fromEntries(await this.entries());
     }
 }

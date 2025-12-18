@@ -42,7 +42,12 @@ export class Store {
             if (create && !node.subtree.has(key)) {
                 const subtree = new Map;
                 const entries = new Set;
-                const dispose = () => node.subtree.delete(key);
+                const dispose = () => {
+                    node.subtree.delete(key);
+                    if (!node.subtree.size && !node.entries?.size) {
+                        //node.dispose?.();
+                    }
+                };
                 node.subtree.set(key, { subtree, entries, context: node, dispose });
             }
             return node?.subtree.get(key);
@@ -70,10 +75,10 @@ export class Store {
     }
 
     async _fire({ path = this.#path, origins = this.#origins, timestamp = Date.now(), ...event }) {
-        if (!['set', 'delete', 'clear'].includes(event.type)) {
+        if (!['set', 'delete', 'clear', 'json'].includes(event.type)) {
             throw new Error(`Invalid event`);
         }
-        const node = this._path(path, 0);
+        const node = this._path(event.key ? path.concat(event.key) : path, 0);
         if (!node) return;
 
         const entries = [];
@@ -83,7 +88,7 @@ export class Store {
         } while ((_node = _node.context) && _node.entries);
 
         const returnValues = [];
-        const fire = (subscription, _path = path) => {
+        const fire = (subscription, _event = event) => {
             const { callback, options, origins: subscriptionOrigins, dispose } = subscription;
 
             let i = this.#origins.length - 1;
@@ -91,18 +96,28 @@ export class Store {
                 if (subscriptionOrigins[i] !== this.#origins[i]) return;
             }
 
-            returnValues.push(callback({ ...event, path: _path, scope: i + 1, origins, timestamp }));
+            returnValues.push(callback({ ..._event, path, scope: i + 1, origins, timestamp }));
 
             if (options.once) dispose();
         };
 
-        entries.forEach(fire);
+        entries.forEach((subscription) => fire(subscription));
 
-        if (event.type === 'clear') {
+        if (event.type === 'clear' || event.type === 'json') {
             const node = this._path(path, false);
-            for (const [key, field] of node?.subtree.entries() || []) {
-                for (const subscription of field.entries) {
-                    fire(subscription, path.concat(key));
+            for (const [key, _node] of node?.subtree.entries() || []) {
+
+                let _event = { type: 'delete', key };
+                if (event.type === 'json' && event.data && typeof event.data === 'object') {
+                    if (key in event.data) {
+                        _event = { type: 'set', key, value: event.data[key] };
+                    } else if (event.options?.merge) {
+                        continue;
+                    }
+                }
+
+                for (const subscription of _node.entries) {
+                    fire(subscription, _event);
                 }
             }
         }

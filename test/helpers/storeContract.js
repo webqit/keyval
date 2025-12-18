@@ -67,6 +67,51 @@ export function runStoreContract(createStore, { supportsTTL = true } = {}) {
             );
         });
 
+        it('to json', async () => {
+            await store.set('a', 1);
+            await store.set('b', 2);
+            await store.set('c', 3);
+            await store.delete('a');
+            const json = await store.json();
+            assert.deepEqual(json, { b: 2, c: 3 });
+        });
+
+        it('from json', async () => {
+            const rootEvents = [];
+            const fieldAEvents = [];
+            const fieldBEvents = [];
+            store.observe((e) => rootEvents.push(e.type));
+            store.observe('a', (e) => fieldAEvents.push(e.type));
+            store.observe('b', (e) => fieldBEvents.push(e.type));
+
+            await store.set('a', 1);
+            await store.json({ b: 2, c: 3 });
+            const json = await store.json();
+            assert.deepEqual(json, { b: 2, c: 3 });
+
+            assert.deepEqual(rootEvents, ['set', 'json']);
+            assert.deepEqual(fieldAEvents, ['set', 'delete']);
+            assert.deepEqual(fieldBEvents, ['set']);
+        });
+
+        it('from json with merge', async () => {
+            const rootEvents = [];
+            const fieldAEvents = [];
+            const fieldBEvents = [];
+            store.observe((e) => rootEvents.push(e.type));
+            store.observe('a', (e) => fieldAEvents.push(e.type));
+            store.observe('b', (e) => fieldBEvents.push(e.type));
+
+            await store.set('a', 1);
+            await store.json({ b: 2, c: 3 }, { merge: true });
+            const json = await store.json();
+            assert.deepEqual(json, { a: 1, b: 2, c: 3 });
+
+            assert.deepEqual(rootEvents, ['set', 'json']);
+            assert.deepEqual(fieldAEvents, ['set']);
+            assert.deepEqual(fieldBEvents, ['set']);
+        });
+
         if (supportsTTL) {
             it('expires values after TTL', async () => {
                 await store.set('ttl', 'x');

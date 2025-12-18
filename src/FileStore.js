@@ -32,7 +32,7 @@ export class FileStore extends Store {
         await fs.writeFile(this.#file, JSON.stringify(data, null, 2), 'utf8');
     }
 
-    #wrap(value) {
+    #wrapValue(value) {
         return {
             value,
             expiresAt: this.ttl ? Date.now() + this.ttl * 1000 : null,
@@ -44,6 +44,31 @@ export class FileStore extends Store {
     }
 
     /* ---------- public API ---------- */
+
+    async keys() {
+        const data = await this.#load();
+        return Object.entries(data)
+            .filter(([, e]) => !this.#expired(e))
+            .map(([k]) => k);
+    }
+
+    async values() {
+        const data = await this.#load();
+        return Object.values(data)
+            .filter((e) => !this.#expired(e))
+            .map((e) => e.value);
+    }
+
+    async entries() { return await this.#entries(); }
+
+    async #entries(dump = false) {
+        const data = await this.#load();
+        return Object.entries(data)
+            .filter(([, e]) => !this.#expired(e))
+            .map(([k, e]) => [k, dump ? e : e.value]);
+    }
+
+    async count() { return (await this.keys()).length; }
 
     async has(key) {
         const data = await this.#load();
@@ -74,7 +99,7 @@ export class FileStore extends Store {
     async set(key, value) {
         const event = { type: 'set', key, value };
         const data = await this.#load();
-        data[key] = this.#wrap(value);
+        data[key] = this.#wrapValue(value);
         await this.#save(data);
         await this._fire(event);
     }
@@ -93,28 +118,30 @@ export class FileStore extends Store {
         await this._fire(event);
     }
 
-    async keys() {
-        const data = await this.#load();
-        return Object.entries(data)
-            .filter(([, e]) => !this.#expired(e))
-            .map(([k]) => k);
-    }
+    async json(arg = null, options = {}) {
+        if (arg && arg !== true) {
+            if (typeof arg !== 'object') {
+                throw new Error(`Argument must be a valid JSON object`);
+            }
 
-    async values() {
-        const data = await this.#load();
-        return Object.values(data)
-            .filter((e) => !this.#expired(e))
-            .map((e) => e.value);
-    }
+            const unhashed = {};
+            const data = options.merge ? await this.#load() : {};
+            for (const [key, value] of Object.entries(arg)) {
+                if (options.hashed && !(value && typeof value === 'object')) {
+                    throw new Error(`A hash expected for field ${key}`);
+                }
+                unhashed[key] = options.hashed ? value.value : value;
+                data[key] = options.hashed
+                    ? { ...value, ...this.#wrapValue(value.value) }
+                    : this.#wrapValue(value);
+            }
+        
+            await this.#save(data);
+            const event = { type: 'json', data: unhashed, options };
+            await this._fire(event);
+            return;
+        }
 
-    async entries() {
-        const data = await this.#load();
-        return Object.entries(data)
-            .filter(([, e]) => !this.#expired(e))
-            .map(([k, e]) => [k, e.value]);
-    }
-
-    async count() {
-        return (await this.keys()).length;
+        return Object.fromEntries(await this.#entries(arg));
     }
 }

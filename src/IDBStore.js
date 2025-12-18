@@ -109,98 +109,6 @@ export class IDBStore extends Store {
         await super.close();
     }
 
-    async has(key) {
-        const v = await this.get(key);
-        return v !== undefined;
-    }
-
-    async get(key) {
-        await this.#open();
-        return new Promise((resolve, reject) => {
-            const req = this.#tx().get(key);
-            req.onsuccess = async () => {
-                const node = req.result;
-                if (!node || this.#isExpired(node)) {
-                    if (node) await this.delete(key);
-                    resolve(undefined);
-                } else {
-                    resolve(node.value);
-                }
-            };
-            req.onerror = () => reject(req.error);
-        });
-    }
-
-    async set(key, value) {
-        await this.#open();
-        const event = {
-            type: 'set',
-            key,
-            value,
-            path: this.path,
-            origins: this.origins,
-            timestamp: Date.now(),
-        };
-
-        return new Promise((resolve, reject) => {
-            const tx = this.#db.transaction(this.#storeName, 'readwrite');
-            tx.objectStore(this.#storeName)
-                .put(this.#wrapValue(value), key);
-
-            tx.oncomplete = async () => {
-                await this._fire(event);
-                this.#channel?.postMessage(event);
-                resolve();
-            };
-            tx.onerror = () => reject(tx.error);
-        });
-    }
-
-    async delete(key) {
-        await this.#open();
-        const event = {
-            type: 'delete',
-            key,
-            path: this.path,
-            origins: this.origins,
-            timestamp: Date.now(),
-        };
-
-        return new Promise((resolve, reject) => {
-            const tx = this.#db.transaction(this.#storeName, 'readwrite');
-            tx.objectStore(this.#storeName).delete(key);
-
-            tx.oncomplete = async () => {
-                await this._fire(event);
-                this.#channel?.postMessage(event);
-                resolve();
-            };
-            tx.onerror = () => reject(tx.error);
-        });
-    }
-
-    async clear() {
-        await this.#open();
-        const event = {
-            type: 'clear',
-            path: this.path,
-            origins: this.origins,
-            timestamp: Date.now(),
-        };
-
-        return new Promise((resolve, reject) => {
-            const tx = this.#db.transaction(this.#storeName, 'readwrite');
-            tx.objectStore(this.#storeName).clear();
-
-            tx.oncomplete = async () => {
-                await this._fire(event);
-                this.#channel?.postMessage(event);
-                resolve();
-            };
-            tx.onerror = () => reject(tx.error);
-        });
-    }
-
     async keys() {
         await this.#open();
         return new Promise((resolve, reject) => {
@@ -225,9 +133,10 @@ export class IDBStore extends Store {
         });
     }
 
-    async entries() {
-        await this.#open();
+    async entries() { return await this.#entries(); }
 
+    async #entries(dump = false) {
+        await this.#open();
         return new Promise((resolve, reject) => {
             const tx = this.#db.transaction(this.#storeName, 'readonly');
             const store = tx.objectStore(this.#storeName);
@@ -245,7 +154,7 @@ export class IDBStore extends Store {
                     keys
                         .map((k, i) => [k, values[i]])
                         .filter(([, e]) => !this.#isExpired(e))
-                        .map(([k, e]) => [k, e.value])
+                        .map(([k, e]) => [k, dump ? e : e.value])
                 );
             };
 
@@ -256,5 +165,148 @@ export class IDBStore extends Store {
     async count() {
         const entries = await this.entries();
         return entries.length;
+    }
+
+    async has(key) {
+        const v = await this.get(key);
+        return v !== undefined;
+    }
+
+    async get(key) {
+        await this.#open();
+        return new Promise((resolve, reject) => {
+            const req = this.#tx().get(key);
+            req.onsuccess = async () => {
+                const node = req.result;
+                if (!node || this.#isExpired(node)) {
+                    if (node) await this.delete(key);
+                    resolve(undefined);
+                } else {
+                    resolve(node.value);
+                }
+            };
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    async set(key, value) {
+        const event = {
+            type: 'set',
+            key,
+            value,
+            path: this.path,
+            origins: this.origins,
+            timestamp: Date.now(),
+        };
+
+        await this.#open();
+        return new Promise((resolve, reject) => {
+            const tx = this.#db.transaction(this.#storeName, 'readwrite');
+            tx.objectStore(this.#storeName)
+                .put(this.#wrapValue(value), key);
+
+            tx.oncomplete = async () => {
+                await this._fire(event);
+                this.#channel?.postMessage(event);
+                resolve();
+            };
+            tx.onerror = () => reject(tx.error);
+        });
+    }
+
+    async delete(key) {
+        const event = {
+            type: 'delete',
+            key,
+            path: this.path,
+            origins: this.origins,
+            timestamp: Date.now(),
+        };
+
+        await this.#open();
+        return new Promise((resolve, reject) => {
+            const tx = this.#db.transaction(this.#storeName, 'readwrite');
+            tx.objectStore(this.#storeName).delete(key);
+
+            tx.oncomplete = async () => {
+                await this._fire(event);
+                this.#channel?.postMessage(event);
+                resolve();
+            };
+            tx.onerror = () => reject(tx.error);
+        });
+    }
+
+    async clear() {
+        const event = {
+            type: 'clear',
+            path: this.path,
+            origins: this.origins,
+            timestamp: Date.now(),
+        };
+
+        await this.#open();
+        return new Promise((resolve, reject) => {
+            const tx = this.#db.transaction(this.#storeName, 'readwrite');
+            tx.objectStore(this.#storeName).clear();
+
+            tx.oncomplete = async () => {
+                await this._fire(event);
+                this.#channel?.postMessage(event);
+                resolve();
+            };
+            tx.onerror = () => reject(tx.error);
+        });
+    }
+
+    async json(arg = null, options = {}) {
+        if (arg && arg !== true) {
+            if (typeof arg !== 'object') {
+                throw new Error(`Argument must be a valid JSON object`);
+            }
+
+            const unhashed = {};
+            const data = {};
+            for (const [key, value] of Object.entries(arg)) {
+                if (options.hashed && !(value && typeof value === 'object')) {
+                    throw new Error(`A hash expected for field ${key}`);
+                }
+                unhashed[key] = options.hashed ? value.value : value;
+                data[key] = options.hashed
+                    ? { ...value, ...this.#wrapValue(value.value) }
+                    : this.#wrapValue(value);
+            }
+
+            const event = {
+                type: 'json',
+                data: unhashed,
+                options,
+                path: this.path,
+                origins: this.origins,
+                timestamp: Date.now(),
+            };
+
+            await this.#open();
+            return new Promise((resolve, reject) => {
+                const tx = this.#db.transaction(this.#storeName, 'readwrite');
+
+                const store = tx.objectStore(this.#storeName);
+                if (!options.merge) {
+                    store.clear();
+                }
+                for (const [key, value] of Object.entries(data)) {
+                    store.put(value, key);
+                }
+
+                tx.oncomplete = async () => {
+                    await this._fire(event);
+                    this.#channel?.postMessage(event);
+                    resolve();
+                };
+                tx.onerror = () => reject(tx.error);
+            });
+        }
+
+        return Object.fromEntries(await this.#entries(arg));
     }
 }

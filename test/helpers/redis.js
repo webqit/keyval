@@ -1,12 +1,12 @@
 import { createClient } from 'redis';
 
-export async function redisAvailable() {
-    const client = createClient();
+export async function redisAvailable(redisUrl = null) {
+    const client = createClient({ url: redisUrl });
     try {
         await client.connect();
         await client.quit();
         return true;
-    } catch {
+    } catch (e) {
         return false;
     }
 }
