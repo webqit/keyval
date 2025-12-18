@@ -91,9 +91,9 @@ export class Store {
         const fire = (subscription, _event = event) => {
             const { callback, options, origins: subscriptionOrigins, dispose } = subscription;
 
-            let i = this.#origins.length - 1;
+            let i = origins.length - 1;
             for (; i >= (options.scope || 0); i--) {
-                if (subscriptionOrigins[i] !== this.#origins[i]) return;
+                if (subscriptionOrigins[i] !== origins[i]) return;
             }
 
             returnValues.push(callback({ ..._event, path, scope: i + 1, origins, timestamp }));
