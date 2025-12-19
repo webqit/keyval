@@ -28,7 +28,7 @@
   "exports": {
     ".": "./src/index.js",
     "./file": "./src/FileKV.js",
-    ".//indexeddb": "./src/IndexedDBKV.js",
+    "./indexeddb": "./src/IndexedDBKV.js",
     "./inmemory": "./src/InMemoryKV.js",
     "./redis": "./src/RedisKV.js"
   },
