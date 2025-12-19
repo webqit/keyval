@@ -1,7 +1,7 @@
-import { Store } from './Store.js';
-export { Store };
+import { KV } from './KV.js';
+export { KV };
 
-export class IDBStore extends Store {
+export class IndexedDBKV extends KV {
 
     static #dbCache = new Map;
 
@@ -10,7 +10,7 @@ export class IDBStore extends Store {
     #storeName;
     #channel;
 
-    constructor({ dbName = 'webqit_store', channel = null, ...options }) {
+    constructor({ dbName = 'webqit_keyval', channel = null, ...options }) {
         super(options);
         this.#dbName = dbName;
         this.#storeName = this.path.join(':');
@@ -27,7 +27,7 @@ export class IDBStore extends Store {
             db.close();
 
             // Invalidate local handle so next op reopens
-            IDBStore.#dbCache.delete(this.#dbName);
+            IndexedDBKV.#dbCache.delete(this.#dbName);
 
             this.#db = null;
         };
@@ -36,8 +36,8 @@ export class IDBStore extends Store {
     async #open() {
         const cacheKey = this.#dbName;
 
-        if (IDBStore.#dbCache.has(cacheKey)) {
-            this.#db = IDBStore.#dbCache.get(cacheKey);
+        if (IndexedDBKV.#dbCache.has(cacheKey)) {
+            this.#db = IndexedDBKV.#dbCache.get(cacheKey);
             if (this.#db.objectStoreNames.contains(this.#storeName)) {
                 return this.#db;
             }
@@ -75,7 +75,7 @@ export class IDBStore extends Store {
             this.#db = initialDB;
         }
 
-        IDBStore.#dbCache.set(cacheKey, this.#db);
+        IndexedDBKV.#dbCache.set(cacheKey, this.#db);
         this.#attachDBLifecycle(this.#db);
         return this.#db;
     }
@@ -103,7 +103,7 @@ export class IDBStore extends Store {
         this.#channel?.close();
         this.#db?.close();
 
-        IDBStore.#dbCache.delete(this.#dbName);
+        IndexedDBKV.#dbCache.delete(this.#dbName);
         this.#db = null;
 
         await super.close();

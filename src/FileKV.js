@@ -1,13 +1,13 @@
 import fs from 'fs/promises';
 import Path from 'path';
-import { Store } from './Store.js';
-export { Store };
+import { KV } from './KV.js';
+export { KV };
 
-export class FileStore extends Store {
+export class FileKV extends KV {
 
     #file;
 
-    constructor({ dir = '.webqit_store', ...options }) {
+    constructor({ dir = '.webqit_keyval', ...options }) {
         super(options);
         const safePath = this.path.map(p =>
             p.replace(/[\/\\]/g, '_')

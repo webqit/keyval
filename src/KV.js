@@ -1,4 +1,4 @@
-export class Store {
+export class KV {
 
     static create(options) { return new this(options); }
 

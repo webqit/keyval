@@ -1,10 +1,10 @@
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { FileStore } from '../src/FileStore.js';
-import { runStoreContract } from './helpers/storeContract.js';
+import { FileKV } from '../src/FileKV.js';
+import { runKVContract } from './helpers/kvContract.js';
 
-describe('FileStore', () => {
+describe('FileKV', () => {
 
     let dir;
     let store;
@@ -14,7 +14,7 @@ describe('FileStore', () => {
             path.join(os.tmpdir(), 'filestore-test-')
         );
 
-        store = new FileStore({
+        store = new FileKV({
             dir,
             path: ['test'],
             ttl: 1
@@ -26,5 +26,5 @@ describe('FileStore', () => {
         await fs.rm(dir, { recursive: true, force: true });
     });
 
-    runStoreContract(async () => store);
+    runKVContract(async () => store);
 });

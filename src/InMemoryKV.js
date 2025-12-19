@@ -1,7 +1,7 @@
-import { Store } from './Store.js';
-export { Store };
+import { KV } from './KV.js';
+export { KV };
 
-export class MemoryStore extends Store {
+export class InMemoryKV extends KV {
 
     #exists(node) {
         if (!node?.subtree.has('value')) return;

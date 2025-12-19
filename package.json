@@ -9,7 +9,7 @@
     "keyval",
     "redis",
     "indexeddb",
-    "memory-store",
+    "object-store",
     "file-store",
     "nosql"
   ],
@@ -27,14 +27,14 @@
   "type": "module",
   "exports": {
     ".": "./src/index.js",
-    "./memory": "./src/MemoryStore.js",
-    "./redis": "./src/RedisStore.js",
-    "./idb": "./src/IDBStore.js",
-    "./file": "./src/FileStore.js"
+    "./file": "./src/FileKV.js",
+    ".//indexeddb": "./src/IndexedDBKV.js",
+    "./inmemory": "./src/InMemoryKV.js",
+    "./redis": "./src/RedisKV.js"
   },
   "scripts": {
     "test": "mocha --extension .test.js --recursive --timeout 5000 --exit",
-    "build": "esbuild main=src/MemoryStore.js idb=src/IDBStore.js --bundle --minify --sourcemap --outdir=dist",
+    "build": "esbuild main=src/InMemoryKV.js idb=src/IndexedDBKV.js --bundle --minify --sourcemap --outdir=dist",
     "preversion": "npm run test && npm run build && git add -A dist",
     "postversion": "git push && git push --tags",
     "version:next": "npm version prerelease --preid=next"

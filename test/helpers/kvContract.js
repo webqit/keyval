@@ -1,13 +1,13 @@
 import assert from 'assert';
 
-export function runStoreContract(createStore, { supportsTTL = true } = {}) {
-    describe('Store contract', () => {
+export function runKVContract(createKV, { supportsTTL = true } = {}) {
+    describe('KV contract', () => {
         let store;
         const events = [];
 
         beforeEach(async () => {
             events.length = 0;
-            store = await createStore();
+            store = await createKV();
             store.observe((e) => events.push(e));
         });
 

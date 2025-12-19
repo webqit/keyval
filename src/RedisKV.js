@@ -1,9 +1,9 @@
-import { Store } from './Store.js';
+import { KV } from './KV.js';
 import { createClient } from 'redis';
 export { createClient };
-export { Store };
+export { KV };
 
-export class RedisStore extends Store {
+export class RedisKV extends KV {
 
     #redis;
     #redisPath;

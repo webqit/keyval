@@ -1,9 +1,9 @@
-import { RedisStore } from '../src/RedisStore.js';
-import { runStoreContract } from './helpers/storeContract.js';
+import { RedisKV } from '../src/RedisKV.js';
+import { runKVContract } from './helpers/kvContract.js';
 import { redisAvailable } from './helpers/redis.js';
 
 const redisUrl = null;
-describe('RedisStore', async () => {
+describe('RedisKV', async () => {
     before(async function () {
         this.timeout(20000);
         if (!(await redisAvailable(redisUrl))) {
@@ -11,10 +11,10 @@ describe('RedisStore', async () => {
         }
     });
 
-    let redisStore;
+    let redisKV;
 
     beforeEach(async () => {
-        redisStore = new RedisStore({
+        redisKV = new RedisKV({
             redisUrl,
             path: ['test'],
             channel: 'test-events',
@@ -23,8 +23,8 @@ describe('RedisStore', async () => {
     });
 
     afterEach(async () => {
-        await redisStore?.close();
+        await redisKV?.close();
     });
 
-    runStoreContract(async () => redisStore);
+    runKVContract(async () => redisKV);
 });
