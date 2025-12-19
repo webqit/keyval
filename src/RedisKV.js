@@ -12,12 +12,12 @@ export class RedisKV extends KV {
     #deserialize;
     #connect;
 
-    constructor({ redisUrl = null, channel = null, host = '*', serialize = null, deserialize = null, ...options }) {
+    constructor({ redisUrl = null, channel = null, namespace = '*', serialize = null, deserialize = null, ...options }) {
         super(options);
         this.#redis = redisUrl ? createClient({ url: redisUrl }) : createClient();
         this.#redis.on('error', (err) => console.error('Redis error:', err));
         this.#connect = this.#redis.connect();
-        this.#redisPath = `${host}:${this.path.join(':')}`;
+        this.#redisPath = `${namespace}:${this.path.join(':')}`;
         this.#channel = channel;
         this.#serialize = serialize || ((val) => (val === undefined ? null : JSON.stringify(val)));
         this.#deserialize = deserialize || ((val) => (val === null ? undefined : JSON.parse(val)));
