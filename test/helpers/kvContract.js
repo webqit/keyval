@@ -115,7 +115,7 @@ export function runKVContract(createKV, { supportsTTL = true } = {}) {
         if (supportsTTL) {
             it('expires values after TTL', async () => {
                 await store.set('ttl', 'x');
-                await new Promise(r => setTimeout(r, 1100));
+                await new Promise(r => setTimeout(r, 1600));
                 assert.equal(await store.get('ttl'), undefined);
             });
         }

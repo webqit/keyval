@@ -6,17 +6,21 @@ export class KV {
     #ttl;
     #registry;
     #origins;
+    #options;
 
     get path() { return this.#path; }
     get ttl() { return this.#ttl; }
     get registry() { return this.#registry; }
     get origins() { return this.#origins; }
+    get options() { return this.#options; }
+    get keyLevelTTL() { return true; }
 
-    constructor({ path, ttl = 0, registry = new Map, origins = [] } = {}) {
+    constructor({ path, ttl = 0, registry = new Map, origins = [], ...options } = {}) {
         this.#path = path;
         this.#ttl = ttl;
         this.#registry = registry;
         this.#origins = origins;
+        this.#options = options;
     }
 
     _path(path, create = true) {
@@ -123,6 +127,97 @@ export class KV {
         }
 
         await Promise.all(returnValues);
+    }
+
+    _normalizeExpires(expires) {
+        if (!(expires ?? false)) return;
+
+        // Date instance
+        if (expires instanceof Date) {
+            return expires.getTime();
+        }
+
+        // Numeric timestamp (seconds or ms)
+        if (typeof expires === 'number') {
+            // Heuristic: seconds are too small to be ms
+            return expires < 1e12
+                ? expires * 1000
+                : expires;
+        }
+
+        // ISO date string
+        if (typeof expires === 'string') {
+            const ts = Date.parse(expires);
+            if (!Number.isNaN(ts)) return ts;
+        }
+
+        throw new TypeError(`Invalid expires value: ${expires}`);
+    }
+
+    _expired(node) {
+        if (!this.ttl || !this.keyLevelTTL) return false;
+        return !!(node?.expires && node.expires <= Date.now());
+    }
+
+    _resolveSet(key, value) {
+        const isSelector = typeof key === 'object' && key;
+        let rest;
+        ({ key, value, ...rest } = isSelector ? key : { key, value });
+        if (this.ttl && this.keyLevelTTL) {
+            if (!rest.expires) {
+                // Auto-derived from top-level TTL
+                rest.expires = Date.now() + this.ttl;
+            } else {
+                // Normalize expires
+                rest.expires = this._normalizeExpires(rest.expires);
+            }
+        }
+
+        const event = {
+            type: 'set',
+            key,
+            value,
+            path: this.path,
+            origins: this.origins,
+            timestamp: Date.now(),
+        };
+
+        return { key, value, rest, event };
+    }
+
+    _resolveInputJson(arg, options) {
+        if (typeof arg !== 'object') {
+            throw new Error(`Argument must be a valid JSON object`);
+        }
+
+        const expires = this.ttl && this.keyLevelTTL ? Date.now() + this.ttl : null;
+        const unhashed = {};
+        const data = {};
+        for (const [key, value] of Object.entries(arg)) {
+            if (options.hashed && !(value && typeof value === 'object')) {
+                throw new Error(`A hash expected for field ${key}`);
+            }
+            unhashed[key] = options.hashed ? value.value : value;
+            data[key] = options.hashed ? value : { value };
+            if (expires && !data[key].expires) {
+                // Auto-derived from top-level TTL
+                data[key].expires = expires;
+            } else if (this.ttl && this.keyLevelTTL && data[key].expires) {
+                // Normalize expires
+                data[key].expires = this._normalizeExpires(data[key].expires);
+            }
+        }
+
+        const event = {
+            type: 'json',
+            data: unhashed,
+            options,
+            path: this.path,
+            origins: this.origins,
+            timestamp: Date.now(),
+        };
+
+        return { data, event };
     }
 
     // ----------

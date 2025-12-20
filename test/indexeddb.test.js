@@ -7,7 +7,7 @@ describe('IndexedDBKV', () => {
         return new IndexedDBKV({
             path: ['test'],
             channel: 'test-events',
-            ttl: 1
+            ttl: 1500
         });
     });
 });

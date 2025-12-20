@@ -18,7 +18,8 @@ describe('RedisKV', async () => {
             redisUrl,
             path: ['test'],
             channel: 'test-events',
-            ttl: 1
+            ttl: 1500,
+            keyLevelTTL: false
         });
     });
 

@@ -17,7 +17,7 @@ describe('FileKV', () => {
         store = new FileKV({
             dir,
             path: ['test'],
-            ttl: 1
+            ttl: 1500
         });
     });
 

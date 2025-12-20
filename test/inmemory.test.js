@@ -6,7 +6,7 @@ describe('InMemoryKV', () => {
         return new InMemoryKV({
             path: ['test'],
             channel: 'test-events',
-            ttl: 1
+            ttl: 1500
         });
     });
 });

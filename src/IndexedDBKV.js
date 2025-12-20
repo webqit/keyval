@@ -86,17 +86,6 @@ export class IndexedDBKV extends KV {
             .objectStore(this.#storeName);
     }
 
-    #isExpired(node) {
-        return node?.expiresAt && node.expiresAt <= Date.now();
-    }
-
-    #wrapValue(value) {
-        return {
-            value,
-            expiresAt: this.ttl ? Date.now() + this.ttl * 1000 : null,
-        };
-    }
-
     /* ---------- public API ---------- */
 
     async close() {
@@ -109,29 +98,11 @@ export class IndexedDBKV extends KV {
         await super.close();
     }
 
-    async keys() {
-        await this.#open();
-        return new Promise((resolve, reject) => {
-            const req = this.#tx().getAllKeys();
-            req.onsuccess = () => resolve(req.result);
-            req.onerror = () => reject(req.error);
-        });
-    }
+    async count() { return (await this.keys()).length; }
 
-    async values() {
-        await this.#open();
-        return new Promise((resolve, reject) => {
-            const req = this.#tx().getAll();
-            req.onsuccess = () => {
-                resolve(
-                    req.result
-                        .filter((e) => !this.#isExpired(e))
-                        .map((e) => e.value)
-                );
-            };
-            req.onerror = () => reject(req.error);
-        });
-    }
+    async keys() { return (await this.#entries()).map(([k]) => k); }
+
+    async values() { return (await this.#entries()).map(([, e]) => e); }
 
     async entries() { return await this.#entries(); }
 
@@ -153,7 +124,7 @@ export class IndexedDBKV extends KV {
                 resolve(
                     keys
                         .map((k, i) => [k, values[i]])
-                        .filter(([, e]) => !this.#isExpired(e))
+                        .filter(([, e]) => !this._expired(e))
                         .map(([k, e]) => [k, dump ? e : e.value])
                 );
             };
@@ -162,27 +133,29 @@ export class IndexedDBKV extends KV {
         });
     }
 
-    async count() {
-        const entries = await this.entries();
-        return entries.length;
-    }
-
     async has(key) {
-        const v = await this.get(key);
-        return v !== undefined;
+        key = typeof key === 'object' && key ? key.key : key;
+        return (await this.keys()).includes(key);
     }
 
     async get(key) {
+        const isSelector = typeof key === 'object' && key;
+        key = isSelector ? key.key : key;
+
         await this.#open();
         return new Promise((resolve, reject) => {
             const req = this.#tx().get(key);
             req.onsuccess = async () => {
                 const node = req.result;
-                if (!node || this.#isExpired(node)) {
-                    if (node) await this.delete(key);
-                    resolve(undefined);
+                if (!node || this._expired(node)) {
+                    if (node) {
+                        const tx = this.#db.transaction(this.#storeName, 'readwrite');
+                        tx.objectStore(this.#storeName).delete(key);
+                        tx.oncomplete = () => resolve();
+                        tx.onerror = () => reject(tx.error);
+                    } else resolve();
                 } else {
-                    resolve(node.value);
+                    resolve(isSelector ? node : node.value);
                 }
             };
             req.onerror = () => reject(req.error);
@@ -190,20 +163,14 @@ export class IndexedDBKV extends KV {
     }
 
     async set(key, value) {
-        const event = {
-            type: 'set',
-            key,
-            value,
-            path: this.path,
-            origins: this.origins,
-            timestamp: Date.now(),
-        };
+        let rest, event;
+        ({ key, value, rest, event } = this._resolveSet(key, value));
 
         await this.#open();
         return new Promise((resolve, reject) => {
             const tx = this.#db.transaction(this.#storeName, 'readwrite');
             tx.objectStore(this.#storeName)
-                .put(this.#wrapValue(value), key);
+                .put({ value, ...rest }, key);
 
             tx.oncomplete = async () => {
                 await this._fire(event);
@@ -215,6 +182,8 @@ export class IndexedDBKV extends KV {
     }
 
     async delete(key) {
+        key = typeof key === 'object' && key ? key.key : key;
+
         const event = {
             type: 'delete',
             key,
@@ -261,30 +230,7 @@ export class IndexedDBKV extends KV {
 
     async json(arg = null, options = {}) {
         if (arg && arg !== true) {
-            if (typeof arg !== 'object') {
-                throw new Error(`Argument must be a valid JSON object`);
-            }
-
-            const unhashed = {};
-            const data = {};
-            for (const [key, value] of Object.entries(arg)) {
-                if (options.hashed && !(value && typeof value === 'object')) {
-                    throw new Error(`A hash expected for field ${key}`);
-                }
-                unhashed[key] = options.hashed ? value.value : value;
-                data[key] = options.hashed
-                    ? { ...value, ...this.#wrapValue(value.value) }
-                    : this.#wrapValue(value);
-            }
-
-            const event = {
-                type: 'json',
-                data: unhashed,
-                options,
-                path: this.path,
-                origins: this.origins,
-                timestamp: Date.now(),
-            };
+            const { data, event } = this._resolveInputJson(arg, options);
 
             await this.#open();
             return new Promise((resolve, reject) => {
@@ -294,6 +240,7 @@ export class IndexedDBKV extends KV {
                 if (!options.merge) {
                     store.clear();
                 }
+
                 for (const [key, value] of Object.entries(data)) {
                     store.put(value, key);
                 }
