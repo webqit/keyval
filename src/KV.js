@@ -13,7 +13,7 @@ export class KV {
     get registry() { return this.#registry; }
     get origins() { return this.#origins; }
     get options() { return this.#options; }
-    get keyLevelTTL() { return true; }
+    get keyLevelExpires() { return true; }
 
     constructor({ path, ttl = 0, registry = new Map, origins = [], ...options } = {}) {
         this.#path = path;
@@ -155,7 +155,7 @@ export class KV {
     }
 
     _expired(node) {
-        if (!this.ttl || !this.keyLevelTTL) return false;
+        if (!this.ttl || !this.keyLevelExpires) return false;
         return !!(node?.expires && node.expires <= Date.now());
     }
 
@@ -163,7 +163,7 @@ export class KV {
         const isSelector = typeof key === 'object' && key;
         let rest;
         ({ key, value, ...rest } = isSelector ? key : { key, value });
-        if (this.ttl && this.keyLevelTTL) {
+        if (this.ttl && this.keyLevelExpires) {
             if (!rest.expires) {
                 // Auto-derived from top-level TTL
                 rest.expires = Date.now() + this.ttl;
@@ -190,7 +190,7 @@ export class KV {
             throw new Error(`Argument must be a valid JSON object`);
         }
 
-        const expires = this.ttl && this.keyLevelTTL ? Date.now() + this.ttl : null;
+        const expires = this.ttl && this.keyLevelExpires ? Date.now() + this.ttl : null;
         const unhashed = {};
         const data = {};
         for (const [key, value] of Object.entries(arg)) {
@@ -202,7 +202,7 @@ export class KV {
             if (expires && !data[key].expires) {
                 // Auto-derived from top-level TTL
                 data[key].expires = expires;
-            } else if (this.ttl && this.keyLevelTTL && data[key].expires) {
+            } else if (this.ttl && this.keyLevelExpires && data[key].expires) {
                 // Normalize expires
                 data[key].expires = this._normalizeExpires(data[key].expires);
             }

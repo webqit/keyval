@@ -12,17 +12,17 @@ export class RedisKV extends KV {
     #deserialize;
     #connect;
 
-    #keyLevelTTL;
-    get keyLevelTTL() { return this.#keyLevelTTL; }
+    #keyLevelExpires;
+    get keyLevelExpires() { return this.#keyLevelExpires; }
 
-    constructor({ redisUrl = null, channel = null, namespace = '*', keyLevelTTL = false, serialize = null, deserialize = null, ...options }) {
+    constructor({ redisUrl = null, channel = null, namespace = '*', keyLevelExpires = false, serialize = null, deserialize = null, ...options }) {
         super(options);
         this.#redis = redisUrl ? createClient({ url: redisUrl }) : createClient();
         this.#redis.on('error', (err) => console.error('Redis error:', err));
         this.#connect = this.#redis.connect();
         this.#redisPath = `${namespace}:${this.path.join(':')}`;
         this.#channel = channel;
-        this.#keyLevelTTL = keyLevelTTL;
+        this.#keyLevelExpires = keyLevelExpires;
         this.#serialize = serialize || ((val) => (val === undefined ? null : JSON.stringify(val)));
         this.#deserialize = deserialize || ((val) => (val === null ? undefined : JSON.parse(val)));
     }
@@ -37,7 +37,7 @@ export class RedisKV extends KV {
     }
 
     async count() {
-        if (this.#keyLevelTTL) {
+        if (this.#keyLevelExpires) {
             return (await this.keys()).length;
         }
         await this.#connect;
@@ -45,7 +45,7 @@ export class RedisKV extends KV {
     }
 
     async keys() {
-        if (this.#keyLevelTTL) {
+        if (this.#keyLevelExpires) {
             return (await this.#entries()).map(([k]) => k);
         }
         await this.#connect;
@@ -53,7 +53,7 @@ export class RedisKV extends KV {
     }
 
     async values() {
-        if (this.#keyLevelTTL) {
+        if (this.#keyLevelExpires) {
             return (await this.#entries()).map(([, v]) => v);
         }
         await this.#connect;
@@ -67,7 +67,7 @@ export class RedisKV extends KV {
         let entries = Object.entries(
             await this.#redis.hGetAll(this.#redisPath)
         ).map(([key, value]) => [key, this.#deserialize(value)]);
-        if (this.#keyLevelTTL) {
+        if (this.#keyLevelExpires) {
             entries = entries.filter(([, e]) => !this._expired(e));
         }
         return entries.map(([key, value]) => [key, dump ? value : value?.value]);
@@ -75,7 +75,7 @@ export class RedisKV extends KV {
 
     async has(key) {
         key = typeof key === 'object' && key ? key.key : key;
-        if (this.#keyLevelTTL) {
+        if (this.#keyLevelExpires) {
             return (await this.keys()).includes(key);
         }
         await this.#connect;
@@ -88,7 +88,7 @@ export class RedisKV extends KV {
         await this.#connect;
         const jsonValue = await this.#redis.hGet(this.#redisPath, key);
         const valHash = this.#deserialize(jsonValue);
-        if (this.#keyLevelTTL && this._expired(valHash)) {
+        if (this.#keyLevelExpires && this._expired(valHash)) {
             await this.#redis.hDel(this.#redisPath, key);
             return;
         }
@@ -109,7 +109,7 @@ export class RedisKV extends KV {
             op.publish(this.#channel, eventJson);
         }
         if (this.ttl/* IMPORTANT */) {
-            const effectiveTTL = Math.max(this.ttl, this.#keyLevelTTL && rest.expires ? rest.expires - Date.now() : 0);
+            const effectiveTTL = Math.max(this.ttl, this.#keyLevelExpires && rest.expires ? rest.expires - Date.now() : 0);
             op.pExpire(this.#redisPath, effectiveTTL);
         }
         await op.exec();
@@ -173,7 +173,7 @@ export class RedisKV extends KV {
             for (const [key, value] of Object.entries(data)) {
                 const jsonValue = this.#serialize(value);
                 op.hSet(this.#redisPath, key, jsonValue);
-                if (this.ttl && this.#keyLevelTTL && value.expires) {
+                if (this.ttl && this.#keyLevelExpires && value.expires) {
                     effectiveTTL = Math.max(effectiveTTL, value.expires - Date.now());
                 }
             }
