@@ -7,6 +7,9 @@ export class KV {
     #registry;
     #origins;
     #options;
+    #fireHook;
+    #serializeHook;
+    #deserializeHook;
 
     get path() { return this.#path; }
     get ttl() { return this.#ttl; }
@@ -15,16 +18,22 @@ export class KV {
     get options() { return this.#options; }
     get keyLevelExpires() { return true; }
 
-    constructor({ path, ttl = 0, registry = new Map, origins = [], ...options } = {}) {
+    constructor({ path, ttl = 0, registry = new Map, origins = [], fireHook = null, serializeHook = null, deserializeHook = null, ...options } = {}) {
         this.#path = path;
         this.#ttl = ttl;
         this.#registry = registry;
         this.#origins = origins;
         this.#options = options;
+        this.#fireHook = fireHook;
+        this.#serializeHook = serializeHook || ((val, ...args) => (val === undefined ? null : JSON.stringify(val, ...args)));
+        this.#deserializeHook = deserializeHook || ((val) => (val === null ? undefined : JSON.parse(val)));
     }
 
+    _serialize(val, ...args) { return this.#serializeHook(val, ...args); }
+    _deserialize(val) { return this.#deserializeHook(val); }
+
     _path(path, create = true) {
-        if (!Array.isArray(path) || !path.length) {
+        if (!Array.isArray(path)) {
             throw new Error(`Path length cannot be 0`);
         }
         /*
@@ -55,7 +64,7 @@ export class KV {
                 return node;
             }
             return node?.subtree.get(key);
-        }, { subtree: this.#registry });
+        }, { subtree: this.#registry, entries: new Set });
     }
 
     _observe(path, callback, options = {}) {
@@ -124,6 +133,10 @@ export class KV {
                     fire(subscription, _event);
                 }
             }
+        }
+
+        if (this.#fireHook) {
+            returnValues.push(this.#fireHook({ path, origins, timestamp, ...event }));
         }
 
         await Promise.all(returnValues);

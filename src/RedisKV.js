@@ -8,14 +8,12 @@ export class RedisKV extends KV {
     #redis;
     #redisPath;
     #channel;
-    #serialize;
-    #deserialize;
     #connect;
 
     #keyLevelExpires;
     get keyLevelExpires() { return this.#keyLevelExpires; }
 
-    constructor({ redisUrl = null, channel = null, namespace = '*', keyLevelExpires = false, serialize = null, deserialize = null, ...options }) {
+    constructor({ redisUrl = null, channel = null, namespace = '*', keyLevelExpires = false, ...options }) {
         super(options);
         this.#redis = redisUrl ? createClient({ url: redisUrl }) : createClient();
         this.#redis.on('error', (err) => console.error('Redis error:', err));
@@ -23,8 +21,6 @@ export class RedisKV extends KV {
         this.#redisPath = `${namespace}:${this.path.join(':')}`;
         this.#channel = channel;
         this.#keyLevelExpires = keyLevelExpires;
-        this.#serialize = serialize || ((val) => (val === undefined ? null : JSON.stringify(val)));
-        this.#deserialize = deserialize || ((val) => (val === null ? undefined : JSON.parse(val)));
     }
 
     /* ---------- public API ---------- */
@@ -57,7 +53,7 @@ export class RedisKV extends KV {
             return (await this.#entries()).map(([, v]) => v);
         }
         await this.#connect;
-        return (await this.#redis.hVals(this.#redisPath)).map((v) => this.#deserialize(v)?.value);
+        return (await this.#redis.hVals(this.#redisPath)).map((v) => this._deserialize(v)?.value);
     }
 
     async entries() { return await this.#entries(); }
@@ -66,9 +62,21 @@ export class RedisKV extends KV {
         await this.#connect;
         let entries = Object.entries(
             await this.#redis.hGetAll(this.#redisPath)
-        ).map(([key, value]) => [key, this.#deserialize(value)]);
+        ).map(([key, value]) => [key, this._deserialize(value)]);
         if (this.#keyLevelExpires) {
-            entries = entries.filter(([, e]) => !this._expired(e));
+            const expired = [];
+            entries = entries.filter(([k, e]) => {
+                if (this._expired(e)) {
+                    expired.push(k);
+                    return false;
+                }
+                return true;
+            });
+            if (expired.length) {
+                const op = this.#redis.multi();
+                expired.forEach((k) => op.hDel(this.#redisPath, k));
+                await op.exec();
+            }
         }
         return entries.map(([key, value]) => [key, dump ? value : value?.value]);
     }
@@ -87,7 +95,7 @@ export class RedisKV extends KV {
         key = isSelector ? key.key : key;
         await this.#connect;
         const jsonValue = await this.#redis.hGet(this.#redisPath, key);
-        const valHash = this.#deserialize(jsonValue);
+        const valHash = this._deserialize(jsonValue);
         if (this.#keyLevelExpires && this._expired(valHash)) {
             await this.#redis.hDel(this.#redisPath, key);
             return;
@@ -99,7 +107,7 @@ export class RedisKV extends KV {
         let rest, event;
         ({ key, value, rest, event } = this._resolveSet(key, value));
 
-        const jsonValue = this.#serialize({ value, ...rest });
+        const jsonValue = this._serialize({ value, ...rest });
 
         await this.#connect;
         const op = this.#redis.multi()
@@ -171,7 +179,7 @@ export class RedisKV extends KV {
             }
             let effectiveTTL = this.ttl || 0;
             for (const [key, value] of Object.entries(data)) {
-                const jsonValue = this.#serialize(value);
+                const jsonValue = this._serialize(value);
                 op.hSet(this.#redisPath, key, jsonValue);
                 if (this.ttl && this.#keyLevelExpires && value.expires) {
                     effectiveTTL = Math.max(effectiveTTL, value.expires - Date.now());

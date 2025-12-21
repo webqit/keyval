@@ -115,18 +115,29 @@ export class IndexedDBKV extends KV {
             const valuesReq = store.getAll();
             const keysReq = store.getAllKeys();
 
-            let values, keys;
+            let values, keys, out = [], expired = [];
 
             valuesReq.onsuccess = () => { values = valuesReq.result; };
             keysReq.onsuccess = () => { keys = keysReq.result; };
 
             tx.oncomplete = () => {
-                resolve(
-                    keys
-                        .map((k, i) => [k, values[i]])
-                        .filter(([, e]) => !this._expired(e))
-                        .map(([k, e]) => [k, dump ? e : e.value])
-                );
+                keys.forEach((k, i) => {
+                    const v = values[i];
+                    if (this._expired(v)) {
+                        expired.push(k);
+                    } else {
+                        out.push([k, dump ? v : v.value]);
+                    }
+                });
+                if (expired.length) {
+                    const tx = this.#db.transaction(this.#storeName, 'readwrite');
+                    const store = tx.objectStore(this.#storeName);
+                    expired.forEach((k) => store.delete(k));
+                    tx.oncomplete = () => resolve(out);
+                    tx.onerror = () => reject(tx.error);
+                } else {
+                    resolve(out);
+                }
             };
 
             tx.onerror = () => reject(tx.error);
@@ -150,7 +161,8 @@ export class IndexedDBKV extends KV {
                 if (!node || this._expired(node)) {
                     if (node) {
                         const tx = this.#db.transaction(this.#storeName, 'readwrite');
-                        tx.objectStore(this.#storeName).delete(key);
+                        const store = tx.objectStore(this.#storeName);
+                        store.delete(key);
                         tx.oncomplete = () => resolve();
                         tx.onerror = () => reject(tx.error);
                     } else resolve();
@@ -169,8 +181,8 @@ export class IndexedDBKV extends KV {
         await this.#open();
         return new Promise((resolve, reject) => {
             const tx = this.#db.transaction(this.#storeName, 'readwrite');
-            tx.objectStore(this.#storeName)
-                .put({ value, ...rest }, key);
+            const store = tx.objectStore(this.#storeName);
+            store.put({ value, ...rest }, key);
 
             tx.oncomplete = async () => {
                 await this._fire(event);
@@ -195,7 +207,8 @@ export class IndexedDBKV extends KV {
         await this.#open();
         return new Promise((resolve, reject) => {
             const tx = this.#db.transaction(this.#storeName, 'readwrite');
-            tx.objectStore(this.#storeName).delete(key);
+            const store = tx.objectStore(this.#storeName);
+            store.delete(key);
 
             tx.oncomplete = async () => {
                 await this._fire(event);
@@ -217,7 +230,8 @@ export class IndexedDBKV extends KV {
         await this.#open();
         return new Promise((resolve, reject) => {
             const tx = this.#db.transaction(this.#storeName, 'readwrite');
-            tx.objectStore(this.#storeName).clear();
+            const store = tx.objectStore(this.#storeName);
+            store.clear();
 
             tx.oncomplete = async () => {
                 await this._fire(event);

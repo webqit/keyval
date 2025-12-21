@@ -20,16 +20,28 @@ export class FileKV extends KV {
     async #load() {
         try {
             const data = await fs.readFile(this.#file, 'utf8');
-            return JSON.parse(data);
+            return this._deserialize(data);
         } catch (e) {
             if (e.code === 'ENOENT') return {};
             throw e;
         }
     }
 
+    async #access(data, key) {
+        const node = data[key];
+        if (!node || this._expired(node)) {
+            if (node) {
+                delete data[key];
+                await this.#save(data);
+            }
+            return;
+        }
+        return node;
+    }
+
     async #save(data) {
         await fs.mkdir(Path.dirname(this.#file), { recursive: true });
-        await fs.writeFile(this.#file, JSON.stringify(data, null, 2), 'utf8');
+        await fs.writeFile(this.#file, this._serialize(data, null, 2), 'utf8');
     }
 
     /* ---------- public API ---------- */
@@ -46,18 +58,22 @@ export class FileKV extends KV {
 
     async #entries(dump = false) {
         const data = await this.#load();
-        return Object.entries(data)
-            .filter(([, e]) => !this._expired(e))
-            .map(([k, e]) => [k, dump ? e : e.value]);
+        const out = [];
+        for (const k of Object.keys(data)) {
+            const node = await this.#access(data, k);
+            if (!node) continue;
+            out.push([k, dump ? node : node.value]);
+        }
+        return out;
     }
 
     async has(key) {
         key = typeof key === 'object' && key ? key.key : key;
 
         const data = await this.#load();
-        const node = data[key];
+        const node = await this.#access(data, key);
 
-        if (!node || this._expired(node)) return false;
+        if (!node) return false;
         return true;
     }
 
@@ -66,15 +82,8 @@ export class FileKV extends KV {
         key = isSelector ? key.key : key;
 
         const data = await this.#load();
-        const node = data[key];
-
-        if (!node || this._expired(node)) {
-            if (node) {
-                delete data[key];
-                await this.#save(data);
-            }
-            return undefined;
-        }
+        const node = await this.#access(data, key);
+        if (!node) return;
 
         if (isSelector) return node;
         return node.value;

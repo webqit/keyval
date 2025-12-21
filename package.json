@@ -27,10 +27,12 @@
   "type": "module",
   "exports": {
     ".": "./src/index.js",
+    "./cookiestore": "./src/CookieStoreKV.js",
     "./file": "./src/FileKV.js",
     "./indexeddb": "./src/IndexedDBKV.js",
     "./inmemory": "./src/InMemoryKV.js",
-    "./redis": "./src/RedisKV.js"
+    "./redis": "./src/RedisKV.js",
+    "./webstorage": "./src/WebStorageKV.js"
   },
   "scripts": {
     "test": "mocha --extension .test.js --recursive --timeout 5000 --exit",

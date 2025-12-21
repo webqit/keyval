@@ -3,7 +3,7 @@ export { KV };
 
 export class InMemoryKV extends KV {
 
-    #exists(node) {
+    #touch(node) {
         if (!node?.subtree.has('value')) return;
         const expires = node.subtree.get('expires');
         if (expires && expires <= Date.now()) {
@@ -35,14 +35,14 @@ export class InMemoryKV extends KV {
 
     async #entries(dump = false) {
         return [...(this._path(this.path)?.subtree.entries() || [])]
-            .filter(([, node]) => this.#exists(node))
+            .filter(([, node]) => this.#touch(node))
             .map(([key, node]) => [key, dump ? Object.fromEntries(node.subtree) : node.subtree.get('value')]);
     }
 
     async has(key) {
         key = typeof key === 'object' && key ? key.key : key;
         const fieldPath = this.path.concat(key);
-        return !!this.#exists(this._path(fieldPath, false));
+        return !!this.#touch(this._path(fieldPath, false));
     }
 
     async get(key) {
@@ -50,10 +50,11 @@ export class InMemoryKV extends KV {
         key = isSelector ? key.key : key;
 
         const fieldPath = this.path.concat(key);
-        const node = this._path(fieldPath, false);
+        const node = this.#touch(this._path(fieldPath, false));
+        if (!node) return;
 
         if (isSelector) return Object.fromEntries(node.subtree);
-        return this.#exists(node)?.subtree.get('value');
+        return node.subtree.get('value');
     }
 
     async set(key, value) {
