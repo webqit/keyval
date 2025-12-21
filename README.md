@@ -325,6 +325,40 @@ kv.observe('state', handler, { signal: controller.signal });
 controller.abort();
 ```
 
+#### Cross process observability
+
+Many KV types support cross-process observability. This means that you can observe changes to a namespace from multiple processes – e.g. a KV instance in another worker, tab, or even another machine (for RedisKV).
+
+Supporting implementations are: `RedisKV`, `WebStorageKV`, `CookieStoreKV`, `IndexedDBKV`.
+
+**`RedisKV`**
+
+`RedisKV` supports cross-process observability out of the box using Redis pub/sub. `RedisKV` instances operate globally in the channel name specified in the `options.channel` parameter. This is `null` by default. When not set, only local mutations are observed.
+
+When set, multiple `RedisKV` instances connected to the same Redis server and channel will observe changes to the same namespace – even if they live on different machines. The `observe()` method lets you opt-in or out of global events:
+
+```js
+kv.observe((e) => {
+
+}, { scope: 0/* only locaal events */ });
+```
+
+How it works: TODO
+
+**`WebStorageKV`, `CookieStoreKV`, `IndexedDBKV`**
+
+These KV types support cross-process observability out of the box using `BroadcastChannel`. Instances operate globally in the channel name specified in the `options.channel` parameter. This is `null` by default. When not set, only local mutations are observed.
+
+When set, multiple instances connected to the same channel will observe changes to the same namespace – even if they live in different tabs or processes (e.g. different tabs, the Service Worker or a Web Worker vs the main browser window). The `observe()` method lets you opt-in or out of global events:
+
+```js
+kv.observe((e) => {
+
+}, { scope: 0/* only locaal events */ });
+```
+
+How it works: TODO
+
 ### Expiry and lifetime management
 
 Keyval supports expiry at two levels: **per-namespace TTL** and **field-level expiry**.
@@ -964,7 +998,7 @@ Observer callbacks receive an event describing the mutation (`type`, `key`, `val
 ### Lifecycle
 
 ```js
-kv.cleanup(); // cleans internal observer state
+kv.cleanup(); // auto unbinds all observers
 await kv.close(); // releases backend resources
 ```
 
