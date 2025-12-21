@@ -174,9 +174,9 @@ export class IndexedDBKV extends KV {
         });
     }
 
-    async set(key, value) {
+    async set(key, value, options = {}) {
         let rest, event;
-        ({ key, value, rest, event } = this._resolveSet(key, value));
+        ({ key, value, rest, event } = this._resolveSet(key, value, options));
 
         await this.#open();
         return new Promise((resolve, reject) => {
@@ -193,16 +193,9 @@ export class IndexedDBKV extends KV {
         });
     }
 
-    async delete(key) {
-        key = typeof key === 'object' && key ? key.key : key;
-
-        const event = {
-            type: 'delete',
-            key,
-            path: this.path,
-            origins: this.origins,
-            timestamp: Date.now(),
-        };
+    async delete(key, options = {}) {
+        let event;
+        ({ key, event } = this._resolveDelete(key, options));
 
         await this.#open();
         return new Promise((resolve, reject) => {
@@ -219,13 +212,8 @@ export class IndexedDBKV extends KV {
         });
     }
 
-    async clear() {
-        const event = {
-            type: 'clear',
-            path: this.path,
-            origins: this.origins,
-            timestamp: Date.now(),
-        };
+    async clear(options = {}) {
+        const { event } = this._resolveClear(options);
 
         await this.#open();
         return new Promise((resolve, reject) => {

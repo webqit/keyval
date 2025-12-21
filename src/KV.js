@@ -142,11 +142,11 @@ export class KV {
             const node = this._path(path, false);
             for (const [key, _node] of node?.subtree.entries() || []) {
 
-                let _event = { type: 'delete', key };
+                let _event = { type: 'delete', key, detail: event.detail };
                 if (event.type === 'json' && event.data && typeof event.data === 'object') {
                     if (key in event.data) {
-                        _event = { type: 'set', key, value: event.data[key] };
-                    } else if (event.options?.merge) {
+                        _event = { type: 'set', key, value: event.data[key], detail: event.detail };
+                    } else if (event.merge) {
                         continue;
                     }
                 }
@@ -194,7 +194,7 @@ export class KV {
         return !!(node?.expires && node.expires <= Date.now());
     }
 
-    _resolveSet(key, value) {
+    _resolveSet(key, value, options) {
         const isSelector = typeof key === 'object' && key;
         let rest;
         ({ key, value, ...rest } = isSelector ? key : { key, value });
@@ -213,11 +213,39 @@ export class KV {
             key,
             value,
             path: this.path,
+            detail: options?.detail,
             origins: this.origins,
             timestamp: Date.now(),
         };
 
         return { key, value, rest, event };
+    }
+
+    _resolveDelete(key, options) {
+        key = typeof key === 'object' && key ? key.key : key;
+
+        const event = {
+            type: 'delete',
+            key,
+            path: this.path,
+            detail: options?.detail,
+            origins: this.origins,
+            timestamp: Date.now(),
+        };
+
+        return { key, event };
+    }
+
+    _resolveClear(options) {
+        const event = {
+            type: 'clear',
+            path: this.path,
+            detail: options?.detail,
+            origins: this.origins,
+            timestamp: Date.now(),
+        };
+
+        return { event };
     }
 
     _resolveInputJson(arg, options) {
@@ -246,7 +274,9 @@ export class KV {
         const event = {
             type: 'json',
             data: unhashed,
-            options,
+            hashed: options?.hashed,
+            merge: options?.merge,
+            detail: options?.detail,
             path: this.path,
             origins: this.origins,
             timestamp: Date.now(),

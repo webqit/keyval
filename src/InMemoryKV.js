@@ -57,9 +57,9 @@ export class InMemoryKV extends KV {
         return node.subtree.get('value');
     }
 
-    async set(key, value) {
+    async set(key, value, options = {}) {
         let rest, event;
-        ({ key, value, rest, event } = this._resolveSet(key, value));
+        ({ key, value, rest, event } = this._resolveSet(key, value, options));
 
         const fieldPath = this.path.concat(key);
         const node = this._path(fieldPath);
@@ -69,13 +69,9 @@ export class InMemoryKV extends KV {
         await this._fire(event);
     }
 
-    async delete(key) {
-        key = typeof key === 'object' && key ? key.key : key;
-
-        const event = {
-            type: 'delete',
-            key,
-        };
+    async delete(key, options = {}) {
+        let event;
+        ({ key, event } = this._resolveDelete(key, options));
 
         const fieldPath = this.path.concat(key);
         const node = this._path(fieldPath, false);
@@ -84,8 +80,9 @@ export class InMemoryKV extends KV {
         await this._fire(event);
     }
 
-    async clear() {
-        const event = { type: 'clear' };
+    async clear(options = {}) {
+        const { event } = this._resolveClear(options);
+
         for (const node of this._path(this.path, false)?.subtree.values() || []) {
             this.#drop(node);
         }

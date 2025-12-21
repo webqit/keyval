@@ -94,9 +94,9 @@ export class CookieStoreKV extends KV {
         return isSelector ? c : c.value;
     }
 
-    async set(key, value) {
+    async set(key, value, options = {}) {
         let rest, event;
-        ({ key, value, rest, event } = this._resolveSet(key, value));
+        ({ key, value, rest, event } = this._resolveSet(key, value, options));
 
         await this.#storage.set({
             path: this.#cookiePath,
@@ -109,37 +109,25 @@ export class CookieStoreKV extends KV {
         await this._fire(event);
     }
 
-    async delete(key) {
-        key = typeof key === 'object' && key ? key.key : key;
+    async delete(key, options = {}) {
+        let event;
+        ({ key, event } = this._resolveDelete(key, options));
 
         await this.#storage.delete(this.#fullKey(key), { path: this.#cookiePath });
-
-        const event = {
-            type: 'delete',
-            key,
-            path: this.path,
-            origins: this.origins,
-            timestamp: Date.now(),
-        };
 
         this.#channel?.postMessage(event);
         await this._fire(event);
     }
 
-    async clear() {
+    async clear(options = {}) {
+        const { event } = this._resolveClear(options);
+
         const cookies = await this.#storage.getAll();
         for (const c of cookies) {
             if (this.#ownsCookieName(c.name)) {
                 await this.#storage.delete(c.name, { path: this.#cookiePath }).catch(() => { });
             }
         }
-
-        const event = {
-            type: 'clear',
-            path: this.path,
-            origins: this.origins,
-            timestamp: Date.now(),
-        };
 
         this.#channel?.postMessage(event);
         await this._fire(event);

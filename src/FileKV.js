@@ -89,9 +89,9 @@ export class FileKV extends KV {
         return node.value;
     }
 
-    async set(key, value) {
+    async set(key, value, options = {}) {
         let rest, event;
-        ({ key, value, rest, event } = this._resolveSet(key, value));
+        ({ key, value, rest, event } = this._resolveSet(key, value, options));
 
         const data = await this.#load();
         data[key] = { value, ...rest };
@@ -100,13 +100,9 @@ export class FileKV extends KV {
         await this._fire(event);
     }
 
-    async delete(key) {
-        key = typeof key === 'object' && key ? key.key : key;
-
-        const event = {
-            type: 'delete',
-            key
-        };
+    async delete(key, options = {}) {
+        let event;
+        ({ key, event } = this._resolveDelete(key, options));
 
         const data = await this.#load();
         delete data[key];
@@ -115,8 +111,9 @@ export class FileKV extends KV {
         await this._fire(event);
     }
 
-    async clear() {
-        const event = { type: 'clear' };
+    async clear(options = {}) {
+        const { event } = this._resolveClear(options);
+
         await this.#save({});
         await this._fire(event);
     }

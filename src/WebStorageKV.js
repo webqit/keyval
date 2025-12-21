@@ -99,9 +99,9 @@ export class WebStorageKV extends KV {
         return isSelector ? node : node.value;
     }
 
-    async set(key, value) {
+    async set(key, value, options = {}) {
         let rest, event;
-        ({ key, value, rest, event } = this._resolveSet(key, value));
+        ({ key, value, rest, event } = this._resolveSet(key, value, options));
 
         this.#saveNode(key, { value, ...rest });
 
@@ -110,24 +110,19 @@ export class WebStorageKV extends KV {
         await this._fire(event);
     }
 
-    async delete(key) {
-        key = typeof key === 'object' && key ? key.key : key;
+    async delete(key, options = {}) {
+        let event;
+        ({ key, event } = this._resolveDelete(key, options));
 
         this.#storage.removeItem(this.#fullKey(key));
-
-        const event = {
-            type: 'delete',
-            key,
-            path: this.path,
-            origins: this.origins,
-            timestamp: Date.now(),
-        };
 
         this.#channel?.postMessage(event);
         await this._fire(event);
     }
 
-    async clear() {
+    async clear(options = {}) {
+        const { event } = this._resolveClear(options);
+
         // Remove only keys within this KV path prefix
         for (let i = this.#storage.length - 1; i >= 0; i--) {
             const k = this.#storage.key(i);
@@ -135,13 +130,6 @@ export class WebStorageKV extends KV {
                 this.#storage.removeItem(k);
             }
         }
-
-        const event = {
-            type: 'clear',
-            path: this.path,
-            origins: this.origins,
-            timestamp: Date.now(),
-        };
 
         this.#channel?.postMessage(event);
         await this._fire(event);
