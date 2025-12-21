@@ -60,7 +60,7 @@ export class KV {
                 };
                 node.subtree.set(key, { subtree, entries, context: node, dispose });
             }
-            if (create === 0 && i && !node?.subtree.has(key)) {
+            if (create === 0 && !node?.subtree.has(key)) {
                 return node;
             }
             return node?.subtree.get(key);
