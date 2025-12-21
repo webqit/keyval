@@ -6,10 +6,10 @@
 
 **Keyval** is a small key/value storage layer with a consistent API across environments and backends:
 
-* **In-memory** (fast, ephemeral)
-* **Browser storage** (WebStorage, IndexedDB, Cookie Store)
-* **File storage** (Node.js)
-* **Redis** (shared server-side storage)
+* **In-memory backend** (fast, ephemeral)
+* **Browser storage backend** (WebStorage, IndexedDB, Cookie Store)
+* **File storage backend** (Node.js)
+* **Redis backend** (shared server-side storage)
 
 It gives you a simple dictionary API for state—regardless of where that state physically lives.
 
@@ -113,24 +113,23 @@ await kv.set('flags', { beta: true });
 But Keyval diverges from the `Map` contract in a few ways:
 
 * Methods are async.
-* An async `.count()` method as the equivalent of `Map.size`.
+* An async `.count()` method is the equivalent of `Map.size`.
 * No `.forEach()` method. You use `.entries()` instead.
 
 And Keyval extends the contract with additional methods like `.observe()`, `.close()`, etc.
 
 ### 3. Field metadata
 
-Keyval ensures a transparent mapping between what you set and what you get. But internally, each key is held as a **metadata object** containing the actual value and optional metadata. This typically looks like:
+Keyval ensures a transparent mapping between what you set and what you get. But internally, each key is held as a **metadata object** containing the actual value and optional user-supplied metadata. This typically looks like:
 
 ```ts
 {
   value: any,
-  expires?: number,
-  ...metadata
+  ...meta
 }
 ```
 
-This makes it possible to support field-level metadata (e.g. field-level expiry, etc.) when needed: 
+This makes it possible to support field-level metadata when needed: 
 
 ```js
 kv.set('key1', 22);
