@@ -10,17 +10,17 @@ export class RedisKV extends KV {
     #channel;
     #connect;
 
-    #keyLevelExpires;
-    get keyLevelExpires() { return this.#keyLevelExpires; }
+    #fieldLevelExpiry;
+    get fieldLevelExpiry() { return this.#fieldLevelExpiry; }
 
-    constructor({ redisUrl = null, channel = null, namespace = '*', keyLevelExpires = false, ...options }) {
+    constructor({ redisUrl = null, channel = null, namespace = '*', fieldLevelExpiry = false, ...options }) {
         super(options);
         this.#redis = redisUrl ? createClient({ url: redisUrl }) : createClient();
         this.#redis.on('error', (err) => console.error('Redis error:', err));
         this.#connect = this.#redis.connect();
         this.#redisPath = `${namespace}:${this.path.join(':')}`;
         this.#channel = channel;
-        this.#keyLevelExpires = keyLevelExpires;
+        this.#fieldLevelExpiry = fieldLevelExpiry;
     }
 
     /* ---------- public API ---------- */
@@ -33,7 +33,7 @@ export class RedisKV extends KV {
     }
 
     async count() {
-        if (this.#keyLevelExpires) {
+        if (this.#fieldLevelExpiry) {
             return (await this.keys()).length;
         }
         await this.#connect;
@@ -41,7 +41,7 @@ export class RedisKV extends KV {
     }
 
     async keys() {
-        if (this.#keyLevelExpires) {
+        if (this.#fieldLevelExpiry) {
             return (await this.#entries()).map(([k]) => k);
         }
         await this.#connect;
@@ -49,7 +49,7 @@ export class RedisKV extends KV {
     }
 
     async values() {
-        if (this.#keyLevelExpires) {
+        if (this.#fieldLevelExpiry) {
             return (await this.#entries()).map(([, v]) => v);
         }
         await this.#connect;
@@ -63,7 +63,7 @@ export class RedisKV extends KV {
         let entries = Object.entries(
             await this.#redis.hGetAll(this.#redisPath)
         ).map(([key, value]) => [key, this._deserialize(value)]);
-        if (this.#keyLevelExpires) {
+        if (this.#fieldLevelExpiry) {
             const expired = [];
             entries = entries.filter(([k, e]) => {
                 if (this._expired(e)) {
@@ -83,7 +83,7 @@ export class RedisKV extends KV {
 
     async has(key) {
         key = typeof key === 'object' && key ? key.key : key;
-        if (this.#keyLevelExpires) {
+        if (this.#fieldLevelExpiry) {
             return (await this.keys()).includes(key);
         }
         await this.#connect;
@@ -96,7 +96,7 @@ export class RedisKV extends KV {
         await this.#connect;
         const jsonValue = await this.#redis.hGet(this.#redisPath, key);
         const valHash = this._deserialize(jsonValue);
-        if (this.#keyLevelExpires && this._expired(valHash)) {
+        if (this.#fieldLevelExpiry && this._expired(valHash)) {
             await this.#redis.hDel(this.#redisPath, key);
             return;
         }
@@ -116,8 +116,8 @@ export class RedisKV extends KV {
             const eventJson = JSON.stringify(event);
             op.publish(this.#channel, eventJson);
         }
-        if (this.ttl/* IMPORTANT */) {
-            const effectiveTTL = Math.max(this.ttl, this.#keyLevelExpires && rest.expires ? rest.expires - Date.now() : 0);
+        if (this.hasTTL/* IMPORTANT */) {
+            const effectiveTTL = Math.max(this.ttl, this.#fieldLevelExpiry && rest.expires ? rest.expires - Date.now() : 0);
             op.pExpire(this.#redisPath, effectiveTTL);
         }
         await op.exec();
@@ -181,7 +181,7 @@ export class RedisKV extends KV {
             for (const [key, value] of Object.entries(data)) {
                 const jsonValue = this._serialize(value);
                 op.hSet(this.#redisPath, key, jsonValue);
-                if (this.ttl && this.#keyLevelExpires && value.expires) {
+                if (this.hasTTL && this.#fieldLevelExpiry && value.expires) {
                     effectiveTTL = Math.max(effectiveTTL, value.expires - Date.now());
                 }
             }
@@ -189,7 +189,7 @@ export class RedisKV extends KV {
                 const eventJson = JSON.stringify(event);
                 op.publish(this.#channel, eventJson);
             }
-            if (this.ttl/* IMPORTANT */ && effectiveTTL) {
+            if (this.hasTTL/* IMPORTANT */ && effectiveTTL) {
                 op.pExpire(this.#redisPath, effectiveTTL);
             }
             await op.exec();

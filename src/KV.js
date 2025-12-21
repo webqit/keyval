@@ -13,19 +13,41 @@ export class KV {
 
     get path() { return this.#path; }
     get ttl() { return this.#ttl; }
+    get hasTTL() { return this.#ttl !== null; }
     get registry() { return this.#registry; }
     get origins() { return this.#origins; }
     get options() { return this.#options; }
-    get keyLevelExpires() { return true; }
+    get fieldLevelExpiry() { return true; }
 
-    constructor({ path, ttl = 0, registry = new Map, origins = [], fireHook = null, serializeHook = null, deserializeHook = null, ...options } = {}) {
+    constructor({ path, ttl = null, registry = new Map, origins = [], fireHook = null, serializeHook = null, deserializeHook = null, ...options } = {}) {
+        if (!Array.isArray(path)) {
+            throw new Error('Path must be an array if provided');
+        }
         this.#path = path;
+        if (ttl !== null && typeof ttl !== 'number') {
+            throw new Error('TTL must be a number (in milliseconds) if provided; null otherwise');
+        }
         this.#ttl = ttl;
+        if (!(registry instanceof Map)) {
+            throw new Error('Registry must be an instance of Map if provided');
+        }
         this.#registry = registry;
+        if (!Array.isArray(origins)) {
+            throw new Error('Origins must be an array if provided');
+        }
         this.#origins = origins;
         this.#options = options;
+        if (fireHook && typeof fireHook !== 'function') {
+            throw new Error('fireHook must be a function if provided');
+        }
         this.#fireHook = fireHook;
+        if (serializeHook && typeof serializeHook !== 'function') {
+            throw new Error('serializeHook must be a function if provided');
+        }
         this.#serializeHook = serializeHook || ((val, ...args) => (val === undefined ? null : JSON.stringify(val, ...args)));
+        if (deserializeHook && typeof deserializeHook !== 'function') {
+            throw new Error('deserializeHook must be a function if provided');
+        }
         this.#deserializeHook = deserializeHook || ((val) => (val === null ? undefined : JSON.parse(val)));
     }
 
@@ -168,7 +190,7 @@ export class KV {
     }
 
     _expired(node) {
-        if (!this.ttl || !this.keyLevelExpires) return false;
+        if (!this.hasTTL || !this.fieldLevelExpiry) return false;
         return !!(node?.expires && node.expires <= Date.now());
     }
 
@@ -176,7 +198,7 @@ export class KV {
         const isSelector = typeof key === 'object' && key;
         let rest;
         ({ key, value, ...rest } = isSelector ? key : { key, value });
-        if (this.ttl && this.keyLevelExpires) {
+        if (this.hasTTL && this.fieldLevelExpiry) {
             if (!rest.expires) {
                 // Auto-derived from top-level TTL
                 rest.expires = Date.now() + this.ttl;
@@ -203,7 +225,7 @@ export class KV {
             throw new Error(`Argument must be a valid JSON object`);
         }
 
-        const expires = this.ttl && this.keyLevelExpires ? Date.now() + this.ttl : null;
+        const expires = this.hasTTL && this.fieldLevelExpiry ? Date.now() + this.ttl : null;
         const unhashed = {};
         const data = {};
         for (const [key, value] of Object.entries(arg)) {
@@ -215,7 +237,7 @@ export class KV {
             if (expires && !data[key].expires) {
                 // Auto-derived from top-level TTL
                 data[key].expires = expires;
-            } else if (this.ttl && this.keyLevelExpires && data[key].expires) {
+            } else if (this.hasTTL && this.fieldLevelExpiry && data[key].expires) {
                 // Normalize expires
                 data[key].expires = this._normalizeExpires(data[key].expires);
             }
