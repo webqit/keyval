@@ -1,4 +1,8 @@
-# Keyval
+# Keyval – _Simple Dictionary API for Modern Apps_
+
+[![npm version][npm-version-src]][npm-version-href]<!--[![npm downloads][npm-downloads-src]][npm-downloads-href]-->
+[![bundle][bundle-src]][bundle-href]
+[![License][license-src]][license-href]
 
 **Keyval** is a small key/value storage layer with a consistent API across environments and backends:
 
@@ -388,7 +392,7 @@ const kv = new RedisKV({
 
 When enabled:
 
-* Field-level `expires` semantics begin to take effect.
+* Field-level `expires` semantics take effect.
 * On every `set()` or `json()` mutation, the namespace-level TTL is **re-applied/renewed**
 * If a key has an `expires` later than the namespace-level TTL:
 
@@ -398,8 +402,6 @@ When enabled:
 ---
 
 ## Recipes
-
-The following patterns are intentionally practical—they mirror real architectural decisions rather than abstract examples.
 
 ### 1. Session-scoped state (ephemeral)
 
@@ -473,7 +475,7 @@ All Keyval backends share the same *conceptual* model and API surface, but they 
 * how expiry is enforced,
 * what metadata is supported.
 
-This section documents those differences explicitly, so developers know exactly what to expect when choosing a backend.
+This section documents those differences explicitly, so you know exactly what to expect when choosing a backend.
 
 ### InMemoryKV
 
@@ -757,7 +759,7 @@ Example structure:
 **Expiry**
 
 * Standard hash-level TTL is enforced natively by Redis.
-* Field-level expiry is supported (when a namespace-level TTL is set).
+* Field-level expiry is supported (when a namespace-level TTL is set and `options.fieldLevelExpiry` is set).
 * Expired keys are removed lazily on next access.
 
 **Typical use cases**
@@ -968,3 +970,25 @@ await kv.close(); // releases backend resources
 ```
 
 ---
+
+## Contributing
+
+All forms of contributions are welcome at this time. For example, syntax and other implementation details are all up for discussion. Also, help is needed with more formal documentation. And here are specific links:
+
++ [Project](https://github.com/webqit/keyval)
++ [Documentation](https://github.com/webqit/keyval/wiki)
++ [Discusions](https://github.com/webqit/keyval/discussions)
++ [Issues](https://github.com/webqit/keyval/issues)
+
+## License
+
+MIT.
+
+[npm-version-src]: https://img.shields.io/npm/v/@webqit/keyval?style=flat&colorA=18181B&colorB=F0DB4F
+[npm-version-href]: https://npmjs.com/package/@webqit/keyval
+[npm-downloads-src]: https://img.shields.io/npm/dm/@webqit/keyval?style=flat&colorA=18181B&colorB=F0DB4F
+[npm-downloads-href]: https://npmjs.com/package/@webqit/keyval
+[bundle-src]: https://img.shields.io/bundlephobia/minzip/@webqit/keyval?style=flat&colorA=18181B&colorB=F0DB4F
+[bundle-href]: https://bundlephobia.com/result?p=@webqit/keyval
+[license-src]: https://img.shields.io/github/license/webqit/keyval.svg?style=flat&colorA=18181B&colorB=F0DB4F
+[license-href]: https://github.com/webqit/keyval/blob/master/LICENSE
