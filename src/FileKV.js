@@ -28,15 +28,15 @@ export class FileKV extends KV {
     }
 
     async #access(data, key) {
-        const node = data[key];
-        if (!node || this._expired(node)) {
-            if (node) {
+        const fieldNode = data[key];
+        if (!fieldNode || this._expired(fieldNode)) {
+            if (fieldNode) {
                 delete data[key];
                 await this.#save(data);
             }
             return;
         }
-        return node;
+        return fieldNode;
     }
 
     async #save(data) {
@@ -56,13 +56,17 @@ export class FileKV extends KV {
 
     async entries() { return await this.#entries(); }
 
-    async #entries(dump = false) {
+    async json({ meta = false } = {}) {
+        return Object.fromEntries(await this.#entries({ meta }));
+    }
+
+    async #entries({ meta = false } = {}) {
         const data = await this.#load();
         const out = [];
         for (const k of Object.keys(data)) {
-            const node = await this.#access(data, k);
-            if (!node) continue;
-            out.push([k, dump ? node : node.value]);
+            const fieldNode = await this.#access(data, k);
+            if (!fieldNode) continue;
+            out.push([k, meta ? fieldNode : fieldNode.value]);
         }
         return out;
     }
@@ -71,9 +75,9 @@ export class FileKV extends KV {
         key = typeof key === 'object' && key ? key.key : key;
 
         const data = await this.#load();
-        const node = await this.#access(data, key);
+        const fieldNode = await this.#access(data, key);
 
-        if (!node) return false;
+        if (!fieldNode) return false;
         return true;
     }
 
@@ -82,11 +86,11 @@ export class FileKV extends KV {
         key = isSelector ? key.key : key;
 
         const data = await this.#load();
-        const node = await this.#access(data, key);
-        if (!node) return;
+        const fieldNode = await this.#access(data, key);
+        if (!fieldNode) return;
 
-        if (isSelector) return node;
-        return node.value;
+        if (isSelector) return fieldNode;
+        return fieldNode.value;
     }
 
     async set(key, value, options = {}) {
@@ -97,6 +101,17 @@ export class FileKV extends KV {
         data[key] = { value, ...rest };
         await this.#save(data);
 
+        await this._fire(event);
+    }
+
+    async patch(obj = null, options = {}) {
+        let { data, event } = this._resolveInputPatch(obj, options);
+        if (!options.replace) {
+            const existingData = await this.#load();
+            Object.assign(existingData, data);
+            data = existingData;
+        }
+        await this.#save(data);
         await this._fire(event);
     }
 
@@ -116,21 +131,5 @@ export class FileKV extends KV {
 
         await this.#save({});
         await this._fire(event);
-    }
-
-    async json(arg = null, options = {}) {
-        if (arg && arg !== true) {
-            let { data, event } = this._resolveInputJson(arg, options);
-            if (options.merge) {
-                const existingData = await this.#load();
-                Object.assign(existingData, data);
-                data = existingData;
-            }
-            await this.#save(data);
-            await this._fire(event);
-            return;
-        }
-
-        return Object.fromEntries(await this.#entries(arg));
     }
 }

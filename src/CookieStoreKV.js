@@ -61,7 +61,9 @@ export class CookieStoreKV extends KV {
 
     async entries() { return await this.#entries(); }
 
-    async #entries(dump = false) {
+    async json({ meta = false } = {}) { return Object.fromEntries(await this.#entries({ meta })); }
+
+    async #entries({ meta = false } = {}) {
         const cookies = await this.#storage.getAll();
         const out = [];
 
@@ -70,7 +72,7 @@ export class CookieStoreKV extends KV {
                 || !(c = await this.#access(c))) continue;
             const key = c.name.slice(this.#prefix.length + 1);
             delete c.name;
-            out.push([key, dump ? c : c.value]);
+            out.push([key, meta ? c : c.value]);
         }
 
         return out;
@@ -109,6 +111,31 @@ export class CookieStoreKV extends KV {
         await this._fire(event);
     }
 
+    async patch(obj = null, options = {}) {
+        const { data, event } = this._resolveInputPatch(obj, options);
+
+        if (options.replace) {
+            const cookies = await this.#storage.getAll();
+            for (const c of cookies) {
+                if (this.#ownsCookieName(c.name)) {
+                    await this.#storage.delete(c.name, { path: this.#cookiePath }).catch(() => { });
+                }
+            }
+        }
+
+        for (const [key, { value, ...rest }] of Object.entries(data)) {
+            await this.#storage.set({
+                path: this.#cookiePath,
+                ...rest,
+                name: this.#fullKey(key),
+                value: this._serialize(value),
+            });
+        }
+
+        this.#channel?.postMessage(event);
+        await this._fire(event);
+    }
+
     async delete(key, options = {}) {
         let event;
         ({ key, event } = this._resolveDelete(key, options));
@@ -131,35 +158,5 @@ export class CookieStoreKV extends KV {
 
         this.#channel?.postMessage(event);
         await this._fire(event);
-    }
-
-    async json(arg = null, options = {}) {
-        if (arg && arg !== true) {
-            const { data, event } = this._resolveInputJson(arg, options);
-
-            if (!options.merge) {
-                const cookies = await this.#storage.getAll();
-                for (const c of cookies) {
-                    if (this.#ownsCookieName(c.name)) {
-                        await this.#storage.delete(c.name, { path: this.#cookiePath }).catch(() => { });
-                    }
-                }
-            }
-
-            for (const [key, { value, ...rest }] of Object.entries(data)) {
-                await this.#storage.set({
-                    path: this.#cookiePath,
-                    ...rest,
-                    name: this.#fullKey(key),
-                    value: this._serialize(value),
-                });
-            }
-
-            this.#channel?.postMessage(event);
-            await this._fire(event);
-            return;
-        }
-
-        return Object.fromEntries(await this.#entries(arg));
     }
 }

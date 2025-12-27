@@ -76,7 +76,7 @@ export function runKVContract(createKV, { supportsTTL = true } = {}) {
             assert.deepEqual(json, { b: 2, c: 3 });
         });
 
-        it('from json', async () => {
+        it('dictionary patch { replace: true }', async () => {
             const rootEvents = [];
             const fieldAEvents = [];
             const fieldBEvents = [];
@@ -85,16 +85,16 @@ export function runKVContract(createKV, { supportsTTL = true } = {}) {
             store.observe('b', (e) => fieldBEvents.push(e.type));
 
             await store.set('a', 1);
-            await store.json({ b: 2, c: 3 });
+            await store.patch({ b: 2, c: 3 }, { replace: true });
             const json = await store.json();
             assert.deepEqual(json, { b: 2, c: 3 });
 
-            assert.deepEqual(rootEvents, ['set', 'json']);
+            assert.deepEqual(rootEvents, ['set', 'patch']);
             assert.deepEqual(fieldAEvents, ['set', 'delete']);
             assert.deepEqual(fieldBEvents, ['set']);
         });
 
-        it('from json with merge', async () => {
+        it('dictionary patch { replace: false }', async () => {
             const rootEvents = [];
             const fieldAEvents = [];
             const fieldBEvents = [];
@@ -103,11 +103,11 @@ export function runKVContract(createKV, { supportsTTL = true } = {}) {
             store.observe('b', (e) => fieldBEvents.push(e.type));
 
             await store.set('a', 1);
-            await store.json({ b: 2, c: 3 }, { merge: true });
+            await store.patch({ b: 2, c: 3 });
             const json = await store.json();
             assert.deepEqual(json, { a: 1, b: 2, c: 3 });
 
-            assert.deepEqual(rootEvents, ['set', 'json']);
+            assert.deepEqual(rootEvents, ['set', 'patch']);
             assert.deepEqual(fieldAEvents, ['set']);
             assert.deepEqual(fieldBEvents, ['set']);
         });

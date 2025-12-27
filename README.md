@@ -182,7 +182,7 @@ await kv.clear();
 For working with structured state:
 
 ```js
-await kv.json({ a: 1, b: 2 });
+await kv.patch({ a: 1, b: 2 });
 const all = await kv.json();
 ```
 
@@ -217,29 +217,29 @@ This pattern is especially natural for:
 
 Very often, the data to persist is a JSON object of multiple fields, not just a field value. Sometimes too, you want the whole dictionary returned as plain JSON object.
 
-Keyval’s `json()` method lets you do that.
+Keyval’s `patch()` and `json()` methods let you do that.
 
-#### Writing multiple keys at once
+#### Update multiple fields at once
 
 ```js
-await kv.json({
+await kv.patch({
   profile: { theme: 'dark', locale: 'en' },
   flags: { beta: true },
 });
 ```
 
-This **resets** the dictionary with new values in one operation.
+This **patches** the dictionary.
 
-If you want to **patch** the dictionary instead, use merge mode:
+If you want to **reset** the dictionary instead, use the _replace_ flag:
 
 ```js
-await kv.json(
+await kv.patch(
   { flags: { beta: false } },
-  { merge: true }
+  { replace: true }
 );
 ```
 
-This updates `flags` while leaving other keys untouched.
+This updates `flags` and clears out other fields.
 
 #### Reading the full dictionary
 
@@ -253,10 +253,10 @@ console.log(state);
 // }
 ```
 
-To have each field return their full metadata, pass the boolean `true` to `.json()`:
+To have each field return their full metadata, pass `{ meta: true }` to `.json()`:
 
 ```js
-const state = await kv.json(true);
+const state = await kv.json({ meta: true });
 // {
 //   profile: { value: { theme: 'dark', locale: 'en' }, expires: ... },
 //   flags: { value: { beta: true }, expires: ... }
@@ -426,7 +426,7 @@ const kv = new RedisKV({
 When enabled:
 
 * Field-level `expires` semantics take effect.
-* On every `set()` or `json()` mutation, the namespace-level TTL is **re-applied/renewed**
+* On every `set()` or `patch()` mutation, the namespace-level TTL is **re-applied/renewed**
 * If a key has an `expires` later than the namespace-level TTL:
 
   * the namespace TTL is extended to ensure that the namespace lives as long as the key – and not expire *before* key expiry.
@@ -911,37 +911,35 @@ await kv.clear();
 
 Clears **all keys within the namespace**.
 
-### `json()`
-
-#### Write
+### `patch()`
 
 ```js
-await kv.json(object);
+await kv.patch(object);
 ```
 
 or
 
 ```js
-await kv.json(object, options);
+await kv.patch(object, options);
 ```
 
 #### Options
 
 ```js
 {
-  merge?: boolean;
-  hashed?: boolean;
+  replace?: boolean;
+  meta?: boolean;
 }
 ```
 
-#### `options.hashed`
+#### `options.meta`
 
-Where fields in the input JSON object are **full metadata objects**, not raw values, set `options.hashed: true` to tell the `.json()` method to treat them as such.
+Where fields in the input JSON object are **field metadata objects**, not raw values, set `options.meta: true` to tell `.patch()` to treat them as such.
 
 Example:
 
 ```js
-await kv.json(
+await kv.patch(
   {
     profile: {
       value: { theme: 'dark' },
@@ -949,20 +947,20 @@ await kv.json(
       source: 'import',
     },
   },
-  { hashed: true }
+  { meta: true }
 );
 ```
 
 This allows bulk writes with field-level metadata.
 
-#### Read
+### `json()`
 
 ```js
 await kv.json();       // returns { key: value }
-await kv.json(true);   // returns { key: { value, ...meta } }
+await kv.json({ meta: true });   // returns { key: { value, ...meta } }
 ```
 
-Passing `true` returns the full field metadata.
+Passing `{ meta: true }` returns the full field metadata.
 
 ### Enumeration methods
 

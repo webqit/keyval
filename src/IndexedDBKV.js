@@ -106,7 +106,11 @@ export class IndexedDBKV extends KV {
 
     async entries() { return await this.#entries(); }
 
-    async #entries(dump = false) {
+    async json({ meta = false } = {}) {
+        return Object.fromEntries(await this.#entries({ meta }));
+    }
+
+    async #entries({ meta = false } = {}) {
         await this.#open();
         return new Promise((resolve, reject) => {
             const tx = this.#db.transaction(this.#storeName, 'readonly');
@@ -126,7 +130,7 @@ export class IndexedDBKV extends KV {
                     if (this._expired(v)) {
                         expired.push(k);
                     } else {
-                        out.push([k, dump ? v : v.value]);
+                        out.push([k, meta ? v : v.value]);
                     }
                 });
                 if (expired.length) {
@@ -157,9 +161,9 @@ export class IndexedDBKV extends KV {
         return new Promise((resolve, reject) => {
             const req = this.#tx().get(key);
             req.onsuccess = async () => {
-                const node = req.result;
-                if (!node || this._expired(node)) {
-                    if (node) {
+                const fieldNode = req.result;
+                if (!fieldNode || this._expired(fieldNode)) {
+                    if (fieldNode) {
                         const tx = this.#db.transaction(this.#storeName, 'readwrite');
                         const store = tx.objectStore(this.#storeName);
                         store.delete(key);
@@ -167,7 +171,7 @@ export class IndexedDBKV extends KV {
                         tx.onerror = () => reject(tx.error);
                     } else resolve();
                 } else {
-                    resolve(isSelector ? node : node.value);
+                    resolve(isSelector ? fieldNode : fieldNode.value);
                 }
             };
             req.onerror = () => reject(req.error);
@@ -183,6 +187,31 @@ export class IndexedDBKV extends KV {
             const tx = this.#db.transaction(this.#storeName, 'readwrite');
             const store = tx.objectStore(this.#storeName);
             store.put({ value, ...rest }, key);
+
+            tx.oncomplete = async () => {
+                await this._fire(event);
+                this.#channel?.postMessage(event);
+                resolve();
+            };
+            tx.onerror = () => reject(tx.error);
+        });
+    }
+
+    async patch(obj = null, options = {}) {
+        const { data, event } = this._resolveInputPatch(obj, options);
+
+        await this.#open();
+        return new Promise((resolve, reject) => {
+            const tx = this.#db.transaction(this.#storeName, 'readwrite');
+
+            const store = tx.objectStore(this.#storeName);
+            if (options.replace) {
+                store.clear();
+            }
+
+            for (const [key, value] of Object.entries(data)) {
+                store.put(value, key);
+            }
 
             tx.oncomplete = async () => {
                 await this._fire(event);
@@ -228,34 +257,5 @@ export class IndexedDBKV extends KV {
             };
             tx.onerror = () => reject(tx.error);
         });
-    }
-
-    async json(arg = null, options = {}) {
-        if (arg && arg !== true) {
-            const { data, event } = this._resolveInputJson(arg, options);
-
-            await this.#open();
-            return new Promise((resolve, reject) => {
-                const tx = this.#db.transaction(this.#storeName, 'readwrite');
-
-                const store = tx.objectStore(this.#storeName);
-                if (!options.merge) {
-                    store.clear();
-                }
-
-                for (const [key, value] of Object.entries(data)) {
-                    store.put(value, key);
-                }
-
-                tx.oncomplete = async () => {
-                    await this._fire(event);
-                    this.#channel?.postMessage(event);
-                    resolve();
-                };
-                tx.onerror = () => reject(tx.error);
-            });
-        }
-
-        return Object.fromEntries(await this.#entries(arg));
     }
 }

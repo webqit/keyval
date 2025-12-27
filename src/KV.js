@@ -110,7 +110,7 @@ export class KV {
     }
 
     async _fire({ path = this.#path, origins = this.#origins, timestamp = Date.now(), ...event }) {
-        if (!['set', 'delete', 'clear', 'json'].includes(event.type)) {
+        if (!['set', 'delete', 'clear', 'patch'].includes(event.type)) {
             throw new Error(`Invalid event`);
         }
         const node = this._path(event.key ? path.concat(event.key) : path, 0);
@@ -138,15 +138,15 @@ export class KV {
 
         entries.forEach((subscription) => fire(subscription));
 
-        if (event.type === 'clear' || event.type === 'json') {
+        if (event.type === 'clear' || event.type === 'patch') {
             const node = this._path(path, false);
             for (const [key, _node] of node?.subtree.entries() || []) {
 
                 let _event = { type: 'delete', key, detail: event.detail };
-                if (event.type === 'json' && event.data && typeof event.data === 'object') {
+                if (event.type === 'patch' && event.data && typeof event.data === 'object') {
                     if (key in event.data) {
                         _event = { type: 'set', key, value: event.data[key], detail: event.detail };
-                    } else if (event.merge) {
+                    } else if (!event.replace) {
                         continue;
                     }
                 }
@@ -221,6 +221,43 @@ export class KV {
         return { key, value, rest, event };
     }
 
+    _resolveInputPatch(obj, options) {
+        if (typeof obj !== 'object') {
+            throw new Error(`Argument must be a valid JSON object`);
+        }
+
+        const expires = this.hasTTL && this.fieldLevelExpiry ? Date.now() + this.ttl : null;
+        const plainData = {};
+        const data = {};
+        for (const [key, value] of Object.entries(obj)) {
+            if (options.meta && !(value && typeof value === 'object')) {
+                throw new Error(`A hash expected for field ${key}`);
+            }
+            plainData[key] = options.meta ? value.value : value;
+            data[key] = options.meta ? value : { value };
+            if (expires && !data[key].expires) {
+                // Auto-derived from top-level TTL
+                data[key].expires = expires;
+            } else if (this.hasTTL && this.fieldLevelExpiry && data[key].expires) {
+                // Normalize expires
+                data[key].expires = this._normalizeExpires(data[key].expires);
+            }
+        }
+
+        const event = {
+            type: 'patch',
+            data: plainData,
+            meta: !!options?.meta,
+            replace: !!options?.replace,
+            detail: options?.detail,
+            path: this.path,
+            origins: this.origins,
+            timestamp: Date.now(),
+        };
+
+        return { data, event };
+    }
+
     _resolveDelete(key, options) {
         key = typeof key === 'object' && key ? key.key : key;
 
@@ -246,43 +283,6 @@ export class KV {
         };
 
         return { event };
-    }
-
-    _resolveInputJson(arg, options) {
-        if (typeof arg !== 'object') {
-            throw new Error(`Argument must be a valid JSON object`);
-        }
-
-        const expires = this.hasTTL && this.fieldLevelExpiry ? Date.now() + this.ttl : null;
-        const unhashed = {};
-        const data = {};
-        for (const [key, value] of Object.entries(arg)) {
-            if (options.hashed && !(value && typeof value === 'object')) {
-                throw new Error(`A hash expected for field ${key}`);
-            }
-            unhashed[key] = options.hashed ? value.value : value;
-            data[key] = options.hashed ? value : { value };
-            if (expires && !data[key].expires) {
-                // Auto-derived from top-level TTL
-                data[key].expires = expires;
-            } else if (this.hasTTL && this.fieldLevelExpiry && data[key].expires) {
-                // Normalize expires
-                data[key].expires = this._normalizeExpires(data[key].expires);
-            }
-        }
-
-        const event = {
-            type: 'json',
-            data: unhashed,
-            hashed: options?.hashed,
-            merge: options?.merge,
-            detail: options?.detail,
-            path: this.path,
-            origins: this.origins,
-            timestamp: Date.now(),
-        };
-
-        return { data, event };
     }
 
     // ----------

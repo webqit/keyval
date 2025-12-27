@@ -3,21 +3,21 @@ export { KV };
 
 export class InMemoryKV extends KV {
 
-    #touch(node) {
-        if (!node?.subtree.has('value')) return;
-        const expires = node.subtree.get('expires');
+    #touch(fieldNode) {
+        if (!fieldNode?.subtree.has('value')) return;
+        const expires = fieldNode.subtree.get('expires');
         if (expires && expires <= Date.now()) {
-            this.#drop(node);
+            this.#drop(fieldNode);
             return;
         }
-        return node;
+        return fieldNode;
     }
 
-    #drop(node) {
-        if (node && !node.entries.size) {
-            node.dispose();
+    #drop(fieldNode) {
+        if (fieldNode && !fieldNode.entries.size) {
+            fieldNode.dispose();
         } else {
-            node?.subtree.clear();
+            fieldNode?.subtree.clear();
         }
     }
 
@@ -33,10 +33,14 @@ export class InMemoryKV extends KV {
 
     async entries() { return await this.#entries(); }
 
-    async #entries(dump = false) {
+    async json({ meta = false } = {}) {
+        return Object.fromEntries(await this.#entries({ meta }));
+    }
+
+    async #entries({ meta = false } = {}) {
         return [...(this._path(this.path)?.subtree.entries() || [])]
-            .filter(([, node]) => this.#touch(node))
-            .map(([key, node]) => [key, dump ? Object.fromEntries(node.subtree) : node.subtree.get('value')]);
+            .filter(([, fieldNode]) => this.#touch(fieldNode))
+            .map(([key, fieldNode]) => [key, meta ? Object.fromEntries(fieldNode.subtree) : fieldNode.subtree.get('value')]);
     }
 
     async has(key) {
@@ -50,11 +54,11 @@ export class InMemoryKV extends KV {
         key = isSelector ? key.key : key;
 
         const fieldPath = this.path.concat(key);
-        const node = this.#touch(this._path(fieldPath, false));
-        if (!node) return;
+        const fieldNode = this.#touch(this._path(fieldPath, false));
+        if (!fieldNode) return;
 
-        if (isSelector) return Object.fromEntries(node.subtree);
-        return node.subtree.get('value');
+        if (isSelector) return Object.fromEntries(fieldNode.subtree);
+        return fieldNode.subtree.get('value');
     }
 
     async set(key, value, options = {}) {
@@ -62,9 +66,27 @@ export class InMemoryKV extends KV {
         ({ key, value, rest, event } = this._resolveSet(key, value, options));
 
         const fieldPath = this.path.concat(key);
-        const node = this._path(fieldPath);
-        node.subtree.set('value', value);
-        Object.entries(rest).forEach(([k, v]) => node.subtree.set(k, v));
+        const fieldNode = this._path(fieldPath);
+        fieldNode.subtree.set('value', value);
+        Object.entries(rest).forEach(([k, v]) => fieldNode.subtree.set(k, v));
+
+        await this._fire(event);
+    }
+
+    async patch(obj = null, options = {}) {
+        const { data, event } = this._resolveInputPatch(obj, options);
+
+        if (options.replace) {
+            for (const fieldNode of this._path(this.path, false)?.subtree.values() || []) {
+                this.#drop(fieldNode);
+            }
+        }
+
+        for (const [key, value] of Object.entries(data)) {
+            const fieldPath = this.path.concat(key);
+            const fieldNode = this._path(fieldPath);
+            Object.entries(value).forEach(([k, v]) => fieldNode.subtree.set(k, v));
+        }
 
         await this._fire(event);
     }
@@ -74,8 +96,8 @@ export class InMemoryKV extends KV {
         ({ key, event } = this._resolveDelete(key, options));
 
         const fieldPath = this.path.concat(key);
-        const node = this._path(fieldPath, false);
-        this.#drop(node);
+        const fieldNode = this._path(fieldPath, false);
+        this.#drop(fieldNode);
 
         await this._fire(event);
     }
@@ -83,32 +105,9 @@ export class InMemoryKV extends KV {
     async clear(options = {}) {
         const { event } = this._resolveClear(options);
 
-        for (const node of this._path(this.path, false)?.subtree.values() || []) {
-            this.#drop(node);
+        for (const fieldNode of this._path(this.path, false)?.subtree.values() || []) {
+            this.#drop(fieldNode);
         }
         await this._fire(event);
-    }
-
-    async json(arg = null, options = {}) {
-        if (arg && arg !== true) {
-            const { data, event } = this._resolveInputJson(arg, options);
-
-            if (!options.merge) {
-                for (const node of this._path(this.path, false)?.subtree.values() || []) {
-                    this.#drop(node);
-                }
-            }
-
-            for (const [key, value] of Object.entries(data)) {
-                const fieldPath = this.path.concat(key);
-                const node = this._path(fieldPath);
-                Object.entries(value).forEach(([k, v]) => node.subtree.set(k, v));
-            }
-
-            await this._fire(event);
-            return;
-        }
-
-        return Object.fromEntries(await this.#entries(arg));
     }
 }

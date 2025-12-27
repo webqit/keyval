@@ -58,7 +58,11 @@ export class RedisKV extends KV {
 
     async entries() { return await this.#entries(); }
 
-    async #entries(dump = false) {
+    async json({ meta = false } = {}) {
+        return Object.fromEntries(await this.#entries({ meta }));
+    }
+
+    async #entries({ meta = false } = {}) {
         await this.#connect;
         let entries = Object.entries(
             await this.#redis.hGetAll(this.#redisPath)
@@ -78,7 +82,7 @@ export class RedisKV extends KV {
                 await op.exec();
             }
         }
-        return entries.map(([key, value]) => [key, dump ? value : value?.value]);
+        return entries.map(([key, value]) => [key, meta ? value : value?.value]);
     }
 
     async has(key) {
@@ -125,6 +129,34 @@ export class RedisKV extends KV {
         await this._fire(event);
     }
 
+    async patch(obj = null, options = {}) {
+        const { data, event } = this._resolveInputPatch(obj, options);
+
+        await this.#connect;
+        const op = this.#redis.multi();
+        if (options.replace) {
+            op.del(this.#redisPath);
+        }
+        let effectiveTTL = this.ttl || 0;
+        for (const [key, value] of Object.entries(data)) {
+            const jsonValue = this._serialize(value);
+            op.hSet(this.#redisPath, key, jsonValue);
+            if (this.hasTTL && this.#fieldLevelExpiry && value.expires) {
+                effectiveTTL = Math.max(effectiveTTL, value.expires - Date.now());
+            }
+        }
+        if (this.#channel) {
+            const eventJson = JSON.stringify(event);
+            op.publish(this.#channel, eventJson);
+        }
+        if (this.hasTTL/* IMPORTANT */ && effectiveTTL) {
+            op.pExpire(this.#redisPath, effectiveTTL);
+        }
+        await op.exec();
+
+        await this._fire(event);
+    }
+
     async delete(key, options = {}) {
         let event;
         ({ key, event } = this._resolveDelete(key, options));
@@ -154,38 +186,5 @@ export class RedisKV extends KV {
         await op.exec();
 
         await this._fire(event);
-    }
-
-    async json(arg = null, options = {}) {
-        if (arg && arg !== true) {
-            const { data, event } = this._resolveInputJson(arg, options);
-
-            await this.#connect;
-            const op = this.#redis.multi();
-            if (!options.merge) {
-                op.del(this.#redisPath);
-            }
-            let effectiveTTL = this.ttl || 0;
-            for (const [key, value] of Object.entries(data)) {
-                const jsonValue = this._serialize(value);
-                op.hSet(this.#redisPath, key, jsonValue);
-                if (this.hasTTL && this.#fieldLevelExpiry && value.expires) {
-                    effectiveTTL = Math.max(effectiveTTL, value.expires - Date.now());
-                }
-            }
-            if (this.#channel) {
-                const eventJson = JSON.stringify(event);
-                op.publish(this.#channel, eventJson);
-            }
-            if (this.hasTTL/* IMPORTANT */ && effectiveTTL) {
-                op.pExpire(this.#redisPath, effectiveTTL);
-            }
-            await op.exec();
-
-            await this._fire(event);
-            return;
-        }
-
-        return Object.fromEntries(await this.#entries(arg));
     }
 }

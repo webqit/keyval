@@ -32,26 +32,26 @@ export class WebStorageKV extends KV {
         const raw = this.#storage.getItem(fullKey);
         if (raw == null) return;
 
-        let node;
+        let fieldNode;
         try {
-            node = this._deserialize(raw);
+            fieldNode = this._deserialize(raw);
         } catch {
             // Corrupt/unexpected value -> treat as absent
             this.#storage.removeItem(fullKey);
             return;
         }
 
-        if (this._expired(node)) {
+        if (this._expired(fieldNode)) {
             this.#storage.removeItem(fullKey);
             return;
         }
 
-        return node;
+        return fieldNode;
     }
 
-    #saveNode(key, node) {
+    #saveNode(key, fieldNode) {
         const fullKey = this.#fullKey(key);
-        this.#storage.setItem(fullKey, this._serialize(node));
+        this.#storage.setItem(fullKey, this._serialize(fieldNode));
     }
 
     /* ---------- public API ---------- */
@@ -69,17 +69,21 @@ export class WebStorageKV extends KV {
 
     async entries() { return await this.#entries(); }
 
-    async #entries(dump = false) {
+    async json({ meta = false } = {}) {
+        return Object.fromEntries(await this.#entries({ meta }));
+    }
+
+    async #entries({ meta = false } = {}) {
         const out = [];
         for (let i = 0; i < this.#storage.length; i++) {
             const storageKey = this.#storage.key(i);
             if (!this.#ownsStorageKey(storageKey)) continue;
 
             const key = storageKey.slice(this.#prefix.length + 1);
-            const node = this.#access(key);
-            if (!node) continue;
+            const fieldNode = this.#access(key);
+            if (!fieldNode) continue;
 
-            out.push([key, dump ? node : node.value]);
+            out.push([key, meta ? fieldNode : fieldNode.value]);
         }
         return out;
     }
@@ -93,10 +97,10 @@ export class WebStorageKV extends KV {
         const isSelector = typeof key === 'object' && key;
         key = isSelector ? key.key : key;
 
-        const node = this.#access(key);
-        if (!node) return;
+        const fieldNode = this.#access(key);
+        if (!fieldNode) return;
 
-        return isSelector ? node : node.value;
+        return isSelector ? fieldNode : fieldNode.value;
     }
 
     async set(key, value, options = {}) {
@@ -106,6 +110,27 @@ export class WebStorageKV extends KV {
         this.#saveNode(key, { value, ...rest });
 
         // Fire events locally + across tabs
+        this.#channel?.postMessage(event);
+        await this._fire(event);
+    }
+
+    async patch(obj = null, options = {}) {
+        let { data, event } = this._resolveInputPatch(obj, options);
+
+        if (options.replace) {
+            for (let i = this.#storage.length - 1; i >= 0; i--) {
+                const k = this.#storage.key(i);
+                if (this.#ownsStorageKey(k)) {
+                    this.#storage.removeItem(k);
+                }
+            }
+        }
+
+        for (const [key, fieldNode] of Object.entries(data)) {
+            const storedNode = { ...fieldNode };
+            this.#saveNode(key, storedNode);
+        }
+
         this.#channel?.postMessage(event);
         await this._fire(event);
     }
@@ -133,31 +158,5 @@ export class WebStorageKV extends KV {
 
         this.#channel?.postMessage(event);
         await this._fire(event);
-    }
-
-    async json(arg = null, options = {}) {
-        if (arg && arg !== true) {
-            let { data, event } = this._resolveInputJson(arg, options);
-
-            if (!options.merge) {
-                for (let i = this.#storage.length - 1; i >= 0; i--) {
-                    const k = this.#storage.key(i);
-                    if (this.#ownsStorageKey(k)) {
-                        this.#storage.removeItem(k);
-                    }
-                }
-            }
-
-            for (const [key, node] of Object.entries(data)) {
-                const storedNode = { ...node };
-                this.#saveNode(key, storedNode);
-            }
-
-            this.#channel?.postMessage(event);
-            await this._fire(event);
-            return;
-        }
-
-        return Object.fromEntries(await this.#entries(arg));
     }
 }
