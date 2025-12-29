@@ -15,7 +15,7 @@
   ],
   "homepage": "https://keyval.netlify.app/",
   "icon": "https://webqit.io/icon.svg",
-  "version": "0.2.12",
+  "version": "0.2.13",
   "license": "MIT",
   "repository": {
     "type": "git",
