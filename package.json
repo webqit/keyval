@@ -41,6 +41,9 @@
     "postversion": "git push && git push --tags",
     "version:next": "npm version prerelease --preid=next"
   },
+  "dependencies": {
+    "redis": "^5.10.0"
+  },
   "devDependencies": {
     "chai": "^4.3.4",
     "chai-as-promised": "^7.1.1",
@@ -52,8 +55,5 @@
   "maintainers": [
     "Oxford Harrison <oxharris.dev@gmail.com>"
   ],
-  "contributors": [],
-  "dependencies": {
-    "redis": "^5.10.0"
-  }
+  "contributors": []
 }
