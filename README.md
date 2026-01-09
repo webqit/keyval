@@ -48,7 +48,7 @@ Note that `FileKV` and `RedisKV` are not available in the browser.
 
 ---
 
-## Quick Look
+## A Quick Look
 
 ```js
 const kv = new InMemoryKV({
