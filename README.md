@@ -339,31 +339,55 @@ controller.abort();
 
 #### Cross process observability
 
-Many KV types support cross-process observability. This means that you can observe changes to a namespace from multiple processes – e.g. a KV instance in another worker, tab, or even another machine (for RedisKV).
+Many KV types support cross-process observability. This means that you can observe changes to a namespace from multiple processes – e.g. KV instances across tabs, workers, or even machines (for RedisKV).
 
 Supporting implementations are: `RedisKV`, `WebStorageKV`, `CookieStoreKV`, `IndexedDBKV`.
 
-To coordinate cross-process observability, KV requires a shared channel name. Also, KV requires "origin" tags that help to distinguish KV instances and their events.
+To coordinate cross-process observability, KV requires a shared channel name and "origin" tags that help to distinguish KV instances and their events.
 
-An "origin" tag is an array of scopes passed as `options.origins` in the constructor. As an example, below are two KV instances that will observe each other's changes. They operate from two different instances of the same application (e.g. two different machines, two different tabs, two different workers), and these instances are created per request:
+An "origin" tag is an array of scopes passed via `options.origins` in the constructor.
+
+As an example, below are two KV instances operating over the same _logical space_ – same Redis URL and Redis channel – but operate from two different instances of the same application (e.g. two different machines). They have been set up to observe changes to this shared logical space:
+
+*In application instance 1*
 
 ```js
+// Per application instance
+// These are shared by KV instances in this application instance
+const localSharedRegistry = new Map;
+const applicationInstanceID = 'app-instance-222';
+
+// This is a session instance created on each request
+// but which share the same application-level invariants defined above as the rest
 const kv1 = new RedisKV({
   path: ['session', 'session-123'],
   redisUrl: process.env.REDIS_URL,
-  origins: ['request-543', 'instance-222'],
+  channel: '__ma_app_channel__',
+  origins: ['request-543', applicationInstanceID],
+  registry: localSharedRegistry,
 });
 ```
 
+*In application instance 2*
+
 ```js
+// Per application instance
+// These are shared by KV instances in this application instance
+const localSharedRegistry = new Map;
+const applicationInstanceID = 'app-instance-123';
+
+// This is a session instance created on each request
+// but which share the same application-level invariants defined above as the rest
 const kv2 = new RedisKV({
   path: ['session', 'session-123'],
   redisUrl: process.env.REDIS_URL,
-  origins: ['request-234', 'instance-322'],
+  channel: '__ma_app_channel__',
+  origins: ['request-234', applicationInstanceID],
+  registry: localSharedRegistry,
 });
 ```
 
-The `origins` array helps KV distinguish events coming from `'request-543` in `instance-222` from events coming from `'request-234` in `instance-322`.
+The `origins` array helps KV distinguish events coming from `'request-543` in `app-instance-222` from events coming from `'request-234` in `app-instance-322`.
 
 But these aren't just random tags. **An `origins` array is a sequence of scopes that widens from left to right.** With it, KV makes it possible to observe events _by scope_ – from local to global – using the `scope` option in `observe()`.
 
@@ -375,19 +399,17 @@ kv.observe((e) => {
 
 The value of this option is a number that corresponds to the index of a scope in the `origins` array. The default value is `0`.
 
-In the example above, `0` is the "request" scope, `1` is the "instance" scope. Specifying:
+In the example above, `0` is the "request" scope, `1` is the "app-instance" scope. Specifying:
 
 + `scope: 0` means: observe events firing from the same "request" scope.
-+ `scope: 1` means: observe events firing from _any_ "request" scope in the same "instance".
-+ one-index higher (e.g. `scope: 2`) means: observe events firing from _any_ "request" scope in _any_ "instance".
++ `scope: 1` means: observe events firing from _any_ "request" scope in the same "app-instance".
++ one-index higher (e.g. `scope: 2`) means: observe events firing from _any_ "request" scope in _any_ "app-instance".
 
-Essentially, the higher you go, the more global the scope. And there is no limit to the number of scopes you can define.
+Essentially, the higher you go with `scope`, the more global you observe. And there is no limit to the number of scopes you can define.
 
 **`RedisKV`**
 
-`RedisKV` supports cross-process observability out of the box using Redis pub/sub. Multiple `RedisKV` instances connected to the same Redis server (via `options.redisUrl`) and channel (via `options.channel`) will observe changes to the same logical space – even if they live on different machines.
-
-With the `origins` option properly configured, you can observe events _by scope_ – from local to global – using the `scope` option in `observe()`:
+`RedisKV` supports cross-process observability out of the box using Redis pub/sub. Multiple `RedisKV` instances connected to the same Redis server (via `options.redisUrl`) and channel (via `options.channel`) will observe changes to the same logical space – even if they live on different machines – as shown above.
 
 ```js
 kv.observe((e) => {
@@ -395,7 +417,7 @@ kv.observe((e) => {
 }, { scope: 0/* only local events */ });
 ```
 
-But there is the part that ties it all together: the events synchronization. This is about explicitly binding each instance to events from other instances. It basically looks like this:
+But there is the part that ties it all together: the events synchronization. This is about explicitly binding each KV instance to events from other instances. It basically looks like this:
 
 ```js
 const instanceID = 'instance-123';
@@ -417,9 +439,7 @@ watchClient.connect().then(() => {
 
 **`WebStorageKV`, `CookieStoreKV`, `IndexedDBKV`**
 
-These KV types support cross-process observability out of the box using `BroadcastChannel` messaging. Multiple instances connected to the same channel (via `options.channel`) will observe changes to the same logical space – even if they live on different tabs or workers.
-
-With the `origins` option properly configured, you can observe events _by scope_ – from local to global – using the `scope` option in `observe()`:
+These KV types support cross-process observability out of the box using `BroadcastChannel` messaging. Multiple instances connected to the same channel (via `options.channel`) will observe changes to the same logical space – even if they live on different tabs or workers – as shown above.
 
 ```js
 kv.observe((e) => {
@@ -443,6 +463,10 @@ watchClient.onmessage = async (message) => {
     }
 };
 ```
+
+> [!TIP]
+>
+> In each case above, you probably want something like a `KVFactory` class that declares the shared invariants once (e.g. `redisUrl`, `channel`, `localSharedRegistry`) and set up events synchronization; then have something like a `createKv()` method that handles the creation of KV instances.
 
 ### Expiry and lifetime management
 
