@@ -25,6 +25,7 @@
     "url": "https://github.com/webqit/keyval/issues"
   },
   "type": "module",
+  "main": "./src/index.browser.js",
   "exports": {
     ".": "./src/index.js",
     "./cookiestore": "./src/CookieStoreKV.js",
@@ -36,7 +37,7 @@
   },
   "scripts": {
     "test": "mocha --extension .test.js --recursive --timeout 5000 --exit",
-    "build": "esbuild inmemory=src/InMemoryKV.js indexeddb=src/IndexedDBKV.js cookiestore=src/CookieStoreKV.js webstorage=src/WebStorageKV.js --bundle --minify --sourcemap --outdir=dist",
+    "build": "esbuild main=src/index.browser.js --bundle --minify --sourcemap --outdir=dist",
     "preversion": "npm run test && npm run build && git add -A dist",
     "postversion": "git push && git push --tags",
     "version:next": "npm version prerelease --preid=next"

@@ -21,11 +21,7 @@ It gives you a simple dictionary API for state—regardless of where that state 
 npm i @webqit/keyval
 ```
 
----
-
-## Imports
-
-You import the implementation you need by subpath:
+Import the implementation you need by subpath:
 
 ```js
 import { InMemoryKV } from '@webqit/keyval/inmemory';
@@ -37,6 +33,22 @@ import { RedisKV } from '@webqit/keyval/redis';
 ```
 
 Each implementation follows the same interface.
+
+## CDN Include
+
+```html
+<script src="https://unpkg.com/@webqit/keyval/dist/main.js"></script>
+
+<script>
+    const { InMemoryKV, WebStorageKV, IndexedDBKV, CookieStoreKV } = window.webqit;
+</script>
+```
+
+Note that `FileKV` and `RedisKV` are not available in the browser.
+
+---
+
+## Quick Look
 
 ```js
 const kv = new InMemoryKV({
@@ -331,33 +343,106 @@ Many KV types support cross-process observability. This means that you can obser
 
 Supporting implementations are: `RedisKV`, `WebStorageKV`, `CookieStoreKV`, `IndexedDBKV`.
 
-**`RedisKV`**
+To coordinate cross-process observability, KV requires a shared channel name. Also, KV requires "origin" tags that help to distinguish KV instances and their events.
 
-`RedisKV` supports cross-process observability out of the box using Redis pub/sub. `RedisKV` instances operate globally in the channel name specified in the `options.channel` parameter. This is `null` by default. When not set, only local mutations are observed.
+An "origin" tag is an array of scopes passed as `options.origins` in the constructor. As an example, below are two KV instances that will observe each other's changes. They operate from two different instances of the same application (e.g. two different machines, two different tabs, two different workers), and these instances are created per request:
 
-When set, multiple `RedisKV` instances connected to the same Redis server and channel will observe changes to the same namespace – even if they live on different machines. The `observe()` method lets you opt-in or out of global events:
+```js
+const kv1 = new RedisKV({
+  path: ['session', 'session-123'],
+  redisUrl: process.env.REDIS_URL,
+  origins: ['request-543', 'instance-222'],
+});
+```
+
+```js
+const kv2 = new RedisKV({
+  path: ['session', 'session-123'],
+  redisUrl: process.env.REDIS_URL,
+  origins: ['request-234', 'instance-322'],
+});
+```
+
+The `origins` array helps KV distinguish events coming from `'request-543` in `instance-222` from events coming from `'request-234` in `instance-322`.
+
+But these aren't just random tags. **An `origins` array is a sequence of scopes that widens from left to right.** With it, KV makes it possible to observe events _by scope_ – from local to global – using the `scope` option in `observe()`.
 
 ```js
 kv.observe((e) => {
 
-}, { scope: 0/* only locaal events */ });
+}, { scope: 0/* only local events */ });
 ```
 
-How it works: TODO
+The value of this option is a number that corresponds to the index of a scope in the `origins` array. The default value is `0`.
+
+In the example above, `0` is the "request" scope, `1` is the "instance" scope. Specifying:
+
++ `scope: 0` means: observe events firing from the same "request" scope.
++ `scope: 1` means: observe events firing from _any_ "request" scope in the same "instance".
++ one-index higher (e.g. `scope: 2`) means: observe events firing from _any_ "request" scope in _any_ "instance".
+
+Essentially, the higher you go, the more global the scope. And there is no limit to the number of scopes you can define.
+
+**`RedisKV`**
+
+`RedisKV` supports cross-process observability out of the box using Redis pub/sub. Multiple `RedisKV` instances connected to the same Redis server (via `options.redisUrl`) and channel (via `options.channel`) will observe changes to the same logical space – even if they live on different machines.
+
+With the `origins` option properly configured, you can observe events _by scope_ – from local to global – using the `scope` option in `observe()`:
+
+```js
+kv.observe((e) => {
+
+}, { scope: 0/* only local events */ });
+```
+
+But there is the part that ties it all together: the events synchronization. This is about explicitly binding each instance to events from other instances. It basically looks like this:
+
+```js
+const instanceID = 'instance-123';
+const watchClient = createClient({ url: redisUrl });
+watchClient.connect().then(() => {
+    watchClient.subscribe(channel, async (message) => {
+        try {
+            const event = JSON.parse(message?.trim());
+            if (!Array.isArray(event?.origins)
+                || event.origins[1] === instanceID) return;
+            await instance._fire(event);
+        } catch (e) {
+            console.error('Failed to parse message JSON:', message);
+            console.error(e, '\n\n');
+        }
+    });
+});
+```
 
 **`WebStorageKV`, `CookieStoreKV`, `IndexedDBKV`**
 
-These KV types support cross-process observability out of the box using `BroadcastChannel`. Instances operate globally in the channel name specified in the `options.channel` parameter. This is `null` by default. When not set, only local mutations are observed.
+These KV types support cross-process observability out of the box using `BroadcastChannel` messaging. Multiple instances connected to the same channel (via `options.channel`) will observe changes to the same logical space – even if they live on different tabs or workers.
 
-When set, multiple instances connected to the same channel will observe changes to the same namespace – even if they live in different tabs or processes (e.g. different tabs, the Service Worker or a Web Worker vs the main browser window). The `observe()` method lets you opt-in or out of global events:
+With the `origins` option properly configured, you can observe events _by scope_ – from local to global – using the `scope` option in `observe()`:
 
 ```js
 kv.observe((e) => {
 
-}, { scope: 0/* only locaal events */ });
+}, { scope: 0/* only local events */ });
 ```
 
-How it works: TODO
+But there is also the part that ties it all together: the events synchronization. This is about explicitly binding each instance to events from other instances. It basically looks like this:
+
+```js
+const instanceID = 'instance-123';
+const watchClient = new BroadcastChannel(channel);
+watchClient.onmessage = async (message) => {
+    try {
+        const event = message.data;
+        if (!Array.isArray(event?.origins)
+            || event.origins[1] === instanceID) return;
+        await instance._fire(event);
+    } catch (e) {
+        console.error('Failed to parse message JSON:', message);
+    }
+};
+```
 
 ### Expiry and lifetime management
 
@@ -418,8 +503,9 @@ But since Redis does not natively have a per-field expiry behavior, Keyval requi
 ```js
 const kv = new RedisKV({
   path: ['user', userId],
-  ttl: 60_000,
   fieldLevelExpiry: true,
+  redisUrl: process.env.REDIS_URL,
+  ttl: 60_000,
 });
 ```
 
