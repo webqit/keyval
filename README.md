@@ -128,7 +128,7 @@ But Keyval diverges from the `Map` contract in a few ways:
 * An async `.count()` method is the equivalent of `Map.size`.
 * No `.forEach()` method. You use `.entries()` instead.
 
-And Keyval extends the contract with additional methods like `.observe()`, `.close()`, etc.
+And Keyval extends the contract with additional methods like `.subscribe()`, `.close()`, etc.
 
 ### 3. Field metadata
 
@@ -201,7 +201,7 @@ const all = await kv.json();
 For reacting to changes:
 
 ```js
-kv.observe((event) => {
+kv.subscribe((event) => {
   console.log(event.type, event.key);
 });
 ```
@@ -284,7 +284,7 @@ Keyval provides a small but expressive observation API so you can react to chang
 #### Observing a specific key
 
 ```js
-const stop = kv.observe('profile', (event) => {
+const stop = kv.subscribe('profile', (event) => {
   console.log(event.type, event.value);
 });
 
@@ -299,7 +299,7 @@ This is ideal when a particular value drives behavior elsewhere in your app.
 #### Observing the entire namespace
 
 ```js
-const stop = kv.observe((event) => {
+const stop = kv.subscribe((event) => {
   console.log(event.type, event.key);
 });
 
@@ -316,12 +316,12 @@ This is useful for:
 * derived state
 * audit or logging pipelines
 
-#### One-time observers and cancellation
+#### One-time subscribers and cancellation
 
 Observers can be configured to auto-dispose:
 
 ```js
-kv.observe('flags', (event) => {
+kv.subscribe('flags', (event) => {
   console.log('flags changed once:', event.value);
 }, { once: true });
 ```
@@ -331,7 +331,7 @@ They can also be bound to an `AbortSignal`, which is especially convenient in as
 ```js
 const controller = new AbortController();
 
-kv.observe('state', handler, { signal: controller.signal });
+kv.subscribe('state', handler, { signal: controller.signal });
 
 // later
 controller.abort();
@@ -389,10 +389,10 @@ const kv2 = new RedisKV({
 
 The `origins` array helps KV distinguish events coming from `'request-543` in `app-instance-222` from events coming from `'request-234` in `app-instance-322`.
 
-But these aren't just random tags. **An `origins` array is a sequence of scopes that widens from left to right.** With it, KV makes it possible to observe events _by scope_ – from local to global – using the `scope` option in `observe()`.
+But these aren't just random tags. **An `origins` array is a sequence of scopes that widens from left to right.** With it, KV makes it possible to observe events _by scope_ – from local to global – using the `scope` option in `subscribe()`.
 
 ```js
-kv.observe((e) => {
+kv.subscribe((e) => {
 
 }, { scope: 0/* only local events */ });
 ```
@@ -412,7 +412,7 @@ Essentially, the higher you go with `scope`, the more global you observe. And th
 `RedisKV` supports cross-process observability out of the box using Redis pub/sub. Multiple `RedisKV` instances connected to the same Redis server (via `options.redisUrl`) and channel (via `options.channel`) will observe changes to the same logical space – even if they live on different machines – as shown above.
 
 ```js
-kv.observe((e) => {
+kv.subscribe((e) => {
 
 }, { scope: 0/* only local events */ });
 ```
@@ -442,7 +442,7 @@ watchClient.connect().then(() => {
 These KV types support cross-process observability out of the box using `BroadcastChannel` messaging. Multiple instances connected to the same channel (via `options.channel`) will observe changes to the same logical space – even if they live on different tabs or workers – as shown above.
 
 ```js
-kv.observe((e) => {
+kv.subscribe((e) => {
 
 }, { scope: 0/* only local events */ });
 ```
@@ -917,7 +917,7 @@ Example structure:
 
 All Keyval instances—regardless of backend—expose the same API.
 
-> **All methods are async except `observe()`**.
+> **All methods are async except `subscribe()`**.
 
 ### `set()`
 
@@ -1085,10 +1085,10 @@ await kv.entries();
 
 These methods always reflect the active, non-expired fields.
 
-### `observe()`
+### `subscribe()`
 
 ```js
-const stop = kv.observe(key?, handler, options?);
+const stop = kv.subscribe(key?, handler, options?);
 ```
 
 * The only **synchronous** method.
@@ -1106,7 +1106,7 @@ Observer callbacks receive an event describing the mutation (`type`, `key`, `val
 ### Lifecycle
 
 ```js
-kv.cleanup(); // auto unbinds all observers
+kv.cleanup(); // auto unbinds all subscribers
 await kv.close(); // releases backend resources
 ```
 

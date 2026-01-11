@@ -89,7 +89,7 @@ export class KV {
         }, { subtree: this.#registry, entries: new Set });
     }
 
-    _observe(path, callback, options = {}) {
+    _subscribe(path, callback, options = {}) {
         const node = this._path(path, true);
 
         const dispose = () => {
@@ -287,14 +287,14 @@ export class KV {
 
     // ----------
 
-    observe(key, callback, options = {}) {
+    subscribe(key, callback, options = {}) {
         if (typeof key === 'function') {
             options = callback || {};
             callback = key;
             key = [];
         }
         const fieldPath = this.#path.concat(key);
-        return this._observe(fieldPath, callback, options);
+        return this._subscribe(fieldPath, callback, options);
     }
 
     cleanup() { this._path(this.#path, false)?.dispose(); }

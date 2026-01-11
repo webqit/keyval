@@ -8,7 +8,7 @@ export function runKVContract(createKV, { supportsTTL = true } = {}) {
         beforeEach(async () => {
             events.length = 0;
             store = await createKV();
-            store.observe((e) => events.push(e));
+            store.subscribe((e) => events.push(e));
         });
 
         afterEach(async () => {
@@ -80,9 +80,9 @@ export function runKVContract(createKV, { supportsTTL = true } = {}) {
             const rootEvents = [];
             const fieldAEvents = [];
             const fieldBEvents = [];
-            store.observe((e) => rootEvents.push(e.type));
-            store.observe('a', (e) => fieldAEvents.push(e.type));
-            store.observe('b', (e) => fieldBEvents.push(e.type));
+            store.subscribe((e) => rootEvents.push(e.type));
+            store.subscribe('a', (e) => fieldAEvents.push(e.type));
+            store.subscribe('b', (e) => fieldBEvents.push(e.type));
 
             await store.set('a', 1);
             await store.patch({ b: 2, c: 3 }, { replace: true });
@@ -98,9 +98,9 @@ export function runKVContract(createKV, { supportsTTL = true } = {}) {
             const rootEvents = [];
             const fieldAEvents = [];
             const fieldBEvents = [];
-            store.observe((e) => rootEvents.push(e.type));
-            store.observe('a', (e) => fieldAEvents.push(e.type));
-            store.observe('b', (e) => fieldBEvents.push(e.type));
+            store.subscribe((e) => rootEvents.push(e.type));
+            store.subscribe('a', (e) => fieldAEvents.push(e.type));
+            store.subscribe('b', (e) => fieldBEvents.push(e.type));
 
             await store.set('a', 1);
             await store.patch({ b: 2, c: 3 });
