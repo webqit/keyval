@@ -5,6 +5,8 @@ export { KV };
 
 export class FileKV extends KV {
 
+    #dir;
+    
     #file;
 
     constructor({ dir = '.webqit_keyval', ...options }) {
@@ -12,7 +14,15 @@ export class FileKV extends KV {
         const safePath = this.path.map(p =>
             p.replace(/[\/\\]/g, '_')
         );
+        this.#dir = dir;
         this.#file = Path.join(dir, ...safePath) + '.json';
+    }
+
+    enter(path, options = {}) {
+        return super.enter(path, {
+            dir: this.#dir,
+            ...options
+        });
     }
 
     /* ---------- internals ---------- */

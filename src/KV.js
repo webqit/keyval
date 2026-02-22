@@ -36,7 +36,6 @@ export class KV {
             throw new Error('Origins must be an array if provided');
         }
         this.#origins = origins;
-        this.#options = options;
         if (fireHook && typeof fireHook !== 'function') {
             throw new Error('fireHook must be a function if provided');
         }
@@ -49,7 +48,41 @@ export class KV {
             throw new Error('deserializeHook must be a function if provided');
         }
         this.#deserializeHook = deserializeHook || ((val) => (val === null ? undefined : JSON.parse(val)));
+        this.#options = options;
     }
+
+    enter(path, options = {}) {
+        const _options = {
+            path: this.#path.concat(path),
+            ttl: this.#ttl,
+            registry: this.#registry,
+            origins: this.#origins,
+            fireHook: this.#fireHook,
+            serializeHook: this.#serializeHook,
+            deserializeHook: this.#deserializeHook,
+            ...this.#options,
+            ...options
+        };
+        return this.constructor.create(_options);
+    }
+
+    // ----------
+
+    subscribe(key, callback, options = {}) {
+        if (typeof key === 'function') {
+            options = callback || {};
+            callback = key;
+            key = [];
+        }
+        const fieldPath = this.#path.concat(key);
+        return this._subscribe(fieldPath, callback, options);
+    }
+
+    cleanup() { this._path(this.#path, false)?.dispose(); }
+
+    async close() { }
+
+    // ----------
 
     _serialize(val, ...args) { return this.#serializeHook(val, ...args); }
     _deserialize(val) { return this.#deserializeHook(val); }
@@ -284,20 +317,4 @@ export class KV {
 
         return { event };
     }
-
-    // ----------
-
-    subscribe(key, callback, options = {}) {
-        if (typeof key === 'function') {
-            options = callback || {};
-            callback = key;
-            key = [];
-        }
-        const fieldPath = this.#path.concat(key);
-        return this._subscribe(fieldPath, callback, options);
-    }
-
-    cleanup() { this._path(this.#path, false)?.dispose(); }
-
-    async close() { }
 }

@@ -5,22 +5,39 @@ export { KV };
 
 export class RedisKV extends KV {
 
-    #redis;
-    #redisPath;
+    #redisUrl;
     #channel;
+    #namespace;
+    #fieldLevelExpiry;
+
+    #redisPath;
+    #redis;
     #connect;
 
-    #fieldLevelExpiry;
     get fieldLevelExpiry() { return this.#fieldLevelExpiry; }
 
     constructor({ redisUrl = null, channel = null, namespace = '*', fieldLevelExpiry = false, ...options }) {
         super(options);
+        this.#redisUrl = redisUrl;
+        this.#channel = channel;
+        this.#namespace = namespace;
+        this.#fieldLevelExpiry = fieldLevelExpiry;
+
+        this.#redisPath = `${namespace}:${this.path.join(':')}`;
         this.#redis = redisUrl ? createClient({ url: redisUrl }) : createClient();
         this.#redis.on('error', (err) => console.error('Redis error:', err));
         this.#connect = this.#redis.connect();
-        this.#redisPath = `${namespace}:${this.path.join(':')}`;
-        this.#channel = channel;
-        this.#fieldLevelExpiry = fieldLevelExpiry;
+
+    }
+
+    enter(path, options = {}) {
+        return super.enter(path, {
+            redisUrl: this.#redisUrl,
+            channel: this.#channel,
+            namespace: this.#namespace,
+            fieldLevelExpiry: this.#fieldLevelExpiry,
+            ...options
+        });
     }
 
     /* ---------- public API ---------- */

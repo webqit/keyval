@@ -5,18 +5,27 @@ export class IndexedDBKV extends KV {
 
     static #dbCache = new Map;
 
-    #db;
     #dbName;
-    #storeName;
     #channel;
+    
+    #db;
+    #storeName;
 
     constructor({ dbName = 'webqit_keyval', channel = null, ...options }) {
         super(options);
         this.#dbName = dbName;
-        this.#storeName = this.path.join(':');
         if (channel) {
             this.#channel = new BroadcastChannel(channel);
         }
+        this.#storeName = this.path.join(':');
+    }
+
+    enter(path, options = {}) {
+        return super.enter(path, {
+            dbName: this.#dbName,
+            channel: this.#channel,
+            ...options
+        });
     }
 
     /* ---------- internal helpers ---------- */

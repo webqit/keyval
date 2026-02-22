@@ -4,8 +4,9 @@ export { KV };
 export class WebStorageKV extends KV {
 
     #storage;
-    #prefix;
     #channel;
+
+    #prefix;
 
     constructor({
         storage = 'local',              // 'local' | 'session' | Storage instance
@@ -17,10 +18,18 @@ export class WebStorageKV extends KV {
             typeof storage === 'string'
                 ? (storage === 'session' ? window.sessionStorage : window.localStorage)
                 : storage;
-        this.#prefix = this.path.join(':');
         if (channel) {
             this.#channel = new BroadcastChannel(channel);
         }
+        this.#prefix = this.path.join(':');
+    }
+
+    enter(path, options = {}) {
+        return super.enter(path, {
+            storage: this.#storage,
+            channel: this.#channel,
+            ...options
+        });
     }
 
     #fullKey(key) { return `${this.#prefix}:${key}`; }

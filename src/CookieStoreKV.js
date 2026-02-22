@@ -4,9 +4,10 @@ export { KV };
 export class CookieStoreKV extends KV {
 
     #storage;
-    #prefix;
     #channel;
     #cookiePath;
+    
+    #prefix;
 
     constructor({
         storage = null,
@@ -19,11 +20,20 @@ export class CookieStoreKV extends KV {
             throw new Error(`cookieStore is not available in this environment`);
         }
         this.#storage = storage || cookieStore;
-        this.#prefix = this.path.join(':');
-        this.#cookiePath = cookiePath;
         if (channel) {
             this.#channel = new BroadcastChannel(channel);
         }
+        this.#cookiePath = cookiePath;
+        this.#prefix = this.path.join(':');
+    }
+
+    enter(path, options = {}) {
+        return super.enter(path, {
+            storage: this.#storage,
+            channel: this.#channel,
+            cookiePath: this.#cookiePath,
+            ...options
+        });
     }
 
     #fullKey(key) { return `${this.#prefix}:${key}`; }
